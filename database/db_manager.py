@@ -126,6 +126,17 @@ class DBManager:
         conn.close()
         return state_id
     
+    def update_workflow_approval(self, state_id: int, user_approval: str):
+        """Update the user approval for a workflow state."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            'UPDATE workflow_state SET user_approval = ? WHERE id = ?',
+            (user_approval, state_id)
+        )
+        conn.commit()
+        conn.close()
+    
     def get_workflow_history(self, conversation_id: int) -> List[Dict[str, Any]]:
         """Get workflow history for a conversation."""
         conn = self.get_connection()

@@ -84,12 +84,8 @@ class WorkflowManager:
         current_stage = latest_state['stage']
         current_stage_index = self.STAGES.index(current_stage)
         
-        # Update workflow state with approval
-        self.db_manager.add_workflow_state(
-            conversation_id=conversation_id,
-            stage=current_stage,
-            user_approval=approval
-        )
+        # Update the latest workflow state with approval
+        self.db_manager.update_workflow_approval(latest_state['id'], approval)
         
         # Store user approval message
         approval_msg = f"{'Approved' if approval.lower() == 'y' else 'Rejected'} - {self.STAGE_DESCRIPTIONS[current_stage]}"
