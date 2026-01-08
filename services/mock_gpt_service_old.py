@@ -79,3 +79,46 @@ class MockGPTService:
         
         else:
             return f"안녕하세요! '{user_message}'에 대해 도움을 드리겠습니다. 어떤 점이 궁금하신가요?"
+   - Examples and applications
+
+**III. Conclusion**
+   - Summary of key points
+   - Implications and future considerations
+
+This structure will help organize the information logically and comprehensively.
+            """.strip(),
+            
+            'final_approval': f"""
+**Complete Answer to: "{user_query}"**
+
+Based on the approved sources and structure, here is a comprehensive response:
+
+**Introduction:**
+This topic is important because it addresses fundamental questions in the field. Understanding these concepts provides valuable insights.
+
+**Main Content:**
+The key aspects to consider are:
+- First, we need to understand the foundational concepts
+- Second, we should examine real-world applications
+- Third, we must consider the broader implications
+
+**Practical Applications:**
+This knowledge can be applied in various scenarios, from academic research to practical implementations in industry.
+
+**Conclusion:**
+In summary, this is a multifaceted topic that requires careful consideration of multiple perspectives. The information from reliable sources confirms that a structured approach yields the best understanding.
+
+This response synthesizes information from academic sources and provides a comprehensive answer to your query.
+            """.strip()
+        }
+        
+        return stage_responses.get(stage, self.generate_response([{"role": "user", "content": user_query}]))
+    
+    def refine_based_on_context(
+        self,
+        stage: str,
+        original_query: str,
+        previous_responses: List[str]
+    ) -> str:
+        """Generate a mock refined response."""
+        return self.generate_stage_response(stage, original_query)

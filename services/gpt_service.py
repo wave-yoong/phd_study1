@@ -42,70 +42,64 @@ class GPTService:
         except Exception as e:
             raise Exception(f"Error generating GPT response: {str(e)}")
     
-    def generate_stage_response(self, stage: str, user_query: str) -> str:
-        """
-        Generate a stage-specific response.
-        
-        Args:
-            stage: Current workflow stage ('source_check', 'content_structure', 'final_approval')
-            user_query: User's input query
-            
-        Returns:
-            Stage-appropriate GPT response
-        """
-        stage_prompts = {
-            'source_check': (
-                "You are a helpful assistant in the source checking stage. "
-                "The user has provided a query. Respond by acknowledging their query "
-                "and suggesting reliable sources or approaches to find information. "
-                "Keep your response concise and focused on source validation."
-            ),
-            'content_structure': (
-                "You are a helpful assistant in the content structuring stage. "
-                "Based on the approved sources, provide a structured outline or "
-                "framework for addressing the user's query. Keep it organized and clear."
-            ),
-            'final_approval': (
-                "You are a helpful assistant providing the final response. "
-                "Based on the approved sources and structure, provide a complete, "
-                "well-organized answer to the user's query. Be comprehensive yet concise."
-            )
-        }
-        
-        system_prompt = stage_prompts.get(stage, stage_prompts['source_check'])
-        
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_query}
-        ]
-        
-        return self.generate_response(messages)
-    
-    def refine_based_on_context(
+    def generate_conversational_response(
         self,
         stage: str,
-        original_query: str,
-        previous_responses: List[str]
+        user_message: str,
+        conversation_history: List[Dict[str, str]]
     ) -> str:
         """
-        Generate a refined response based on previous stage outputs.
+        Generate a natural conversational response that implicitly guides through workflow stages.
         
         Args:
-            stage: Current stage
-            original_query: Original user query
-            previous_responses: List of approved responses from previous stages
+            stage: Current workflow stage ('source_planning', 'structure_proposal', 'final_answer')
+            user_message: Latest user message
+            conversation_history: Full conversation history
             
         Returns:
-            Refined response incorporating previous context
+            Contextual conversational response
         """
-        context = "\n\n".join([
-            f"Previous stage output:\n{resp}" 
-            for resp in previous_responses
-        ])
+        stage_instructions = {
+            'source_planning': """당신은 친절한 연구 조수입니다. 사용자의 질문을 받으면:
+1. 질문을 명확히 이해했는지 확인
+2. 어떤 출처나 방법으로 정보를 찾을지 자연스럽게 제안
+3. 사용자가 동의하는지 물어보기 (예: "이런 방향으로 찾아보는게 좋을까요?")
+
+자연스럽고 대화하듯이 응답하세요. "Stage 1" 같은 단계 표시는 하지 마세요.""",
+            
+            'structure_proposal': """사용자가 첫 번째 제안에 동의했습니다. 이제:
+1. 답변을 어떻게 구성할지 간단한 아웃라인 제시
+2. 어떤 순서로 설명할지 제안
+3. 이 구조가 괜찮은지 자연스럽게 확인 (예: "이렇게 정리하면 어떨까요?")
+
+친근하고 대화하듯이 응답하세요.""",
+            
+            'final_answer': """사용자가 구조에도 동의했습니다. 이제:
+1. 제안한 구조대로 완전한 답변 제공
+2. 명확하고 체계적으로 설명
+3. 마지막에 추가로 궁금한 점이 있는지 물어보기
+
+전문적이면서도 친근하게 응답하세요."""
+        }
         
-        messages = [
-            {"role": "system", "content": f"You are at the {stage} stage."},
-            {"role": "user", "content": f"Original query: {original_query}\n\n{context}\n\nProvide your response for this stage."}
-        ]
+        system_prompt = stage_instructions.get(stage, stage_instructions['source_planning'])
         
-        return self.generate_response(messages)
+        # Build conversation context
+        messages = [{"role": "system", "content": system_prompt}]
+        
+        # Add recent conversation history (last 5 messages for context)
+        recent_history = conversation_history[-6:-1] if len(conversation_history) > 1 else []
+        for msg in recent_history:
+            messages.append({
+                "role": msg['role'],
+                "content": msg['content']
+            })
+        
+        # Add current user message
+        messages.append({
+            "role": "user",
+            "content": user_message
+        })
+        
+        return self.generate_response(messages, temperature=0.7, max_tokens=800)
+

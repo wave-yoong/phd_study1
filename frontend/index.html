@@ -47,39 +47,6 @@
             opacity: 0.9;
         }
         
-        .stage-indicator {
-            background: #f8f9fa;
-            padding: 15px 30px;
-            border-bottom: 2px solid #e9ecef;
-            display: none;
-        }
-        
-        .stage-indicator.active {
-            display: block;
-        }
-        
-        .stage-info {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            flex-wrap: wrap;
-            gap: 10px;
-        }
-        
-        .stage-badge {
-            display: inline-block;
-            padding: 6px 12px;
-            background: #667eea;
-            color: white;
-            border-radius: 20px;
-            font-size: 12px;
-            font-weight: bold;
-        }
-        
-        .stage-description {
-            font-size: 14px;
-            color: #495057;
-        }
         
         .chat-area {
             height: 400px;
@@ -179,31 +146,6 @@
             cursor: not-allowed;
         }
         
-        .approval-buttons {
-            display: none;
-            gap: 10px;
-        }
-        
-        .approval-buttons.active {
-            display: flex;
-        }
-        
-        .btn-approve {
-            background: #28a745;
-        }
-        
-        .btn-approve:hover {
-            background: #218838;
-        }
-        
-        .btn-reject {
-            background: #dc3545;
-        }
-        
-        .btn-reject:hover {
-            background: #c82333;
-        }
-        
         .btn-reset {
             background: #6c757d;
         }
@@ -242,31 +184,14 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>🤖 3-Stage Confirmation Chatbot</h1>
-            <p>Multi-stage AI conversation with user approval at each step</p>
-        </div>
-        
-        <div class="stage-indicator" id="stageIndicator">
-            <div class="stage-info">
-                <div>
-                    <span class="stage-badge" id="stageBadge">Stage 1/3</span>
-                </div>
-                <div class="stage-description" id="stageDescription">
-                    Awaiting your query...
-                </div>
-            </div>
+            <h1>🤖 AI Research Assistant</h1>
+            <p>Your intelligent conversation partner</p>
         </div>
         
         <div class="chat-area" id="chatArea">
             <div class="message system">
                 <div class="message-content">
-                    Welcome! Enter your query to start the 3-stage workflow.
-                    <br><br>
-                    <strong>Stage 1:</strong> Source Check - Validate information sources
-                    <br>
-                    <strong>Stage 2:</strong> Content Structure - Organize the response
-                    <br>
-                    <strong>Stage 3:</strong> Final Approval - Complete answer
+                    안녕하세요! 궁금하신 점을 물어보세요. 함께 답을 찾아가겠습니다.
                 </div>
             </div>
         </div>
@@ -276,14 +201,8 @@
             <div class="loading" id="loading">🔄 Processing...</div>
             
             <div class="input-group" id="queryInput">
-                <input type="text" id="userInput" placeholder="Enter your question..." />
-                <button onclick="sendQuery()">Send</button>
-                <button class="btn-reset" onclick="resetChat()">Reset</button>
-            </div>
-            
-            <div class="approval-buttons" id="approvalButtons">
-                <button class="btn-approve" onclick="approve('y')">✓ Approve (y)</button>
-                <button class="btn-reject" onclick="approve('n')">✗ Reject (n)</button>
+                <input type="text" id="userInput" placeholder="궁금한 것을 입력하세요..." />
+                <button onclick="sendMessage()">Send</button>
                 <button class="btn-reset" onclick="resetChat()">Reset</button>
             </div>
         </div>
@@ -291,7 +210,6 @@
     
     <script>
         let conversationId = null;
-        let awaitingApproval = false;
         
         function addMessage(role, content, isSystem = false) {
             const chatArea = document.getElementById('chatArea');
@@ -312,27 +230,19 @@
             chatArea.scrollTop = chatArea.scrollHeight;
         }
         
-        function updateStage(stageNumber, description) {
-            const indicator = document.getElementById('stageIndicator');
-            const badge = document.getElementById('stageBadge');
-            const desc = document.getElementById('stageDescription');
-            
-            indicator.classList.add('active');
-            badge.textContent = `Stage ${stageNumber}/3`;
-            desc.textContent = description;
-        }
-        
         function setLoading(isLoading) {
             const loading = document.getElementById('loading');
-            const queryInput = document.getElementById('queryInput');
-            const approvalButtons = document.getElementById('approvalButtons');
+            const input = document.getElementById('userInput');
+            const sendBtn = document.querySelector('button[onclick="sendMessage()"]');
             
             if (isLoading) {
                 loading.classList.add('active');
-                queryInput.style.display = 'none';
-                approvalButtons.classList.remove('active');
+                input.disabled = true;
+                sendBtn.disabled = true;
             } else {
                 loading.classList.remove('active');
+                input.disabled = false;
+                sendBtn.disabled = false;
             }
         }
         
@@ -343,37 +253,28 @@
             setTimeout(() => errorDiv.classList.remove('active'), 5000);
         }
         
-        function toggleInputMode(isApproval) {
-            const queryInput = document.getElementById('queryInput');
-            const approvalButtons = document.getElementById('approvalButtons');
-            
-            if (isApproval) {
-                queryInput.style.display = 'none';
-                approvalButtons.classList.add('active');
-            } else {
-                queryInput.style.display = 'flex';
-                approvalButtons.classList.remove('active');
-            }
-        }
-        
-        async function sendQuery() {
+        async function sendMessage() {
             const input = document.getElementById('userInput');
-            const query = input.value.trim();
+            const message = input.value.trim();
             
-            if (!query) {
-                showError('Please enter a question');
+            if (!message) {
+                showError('메시지를 입력해주세요');
                 return;
             }
             
-            addMessage('user', query);
+            addMessage('user', message);
             input.value = '';
             setLoading(true);
             
             try {
-                const response = await fetch('/api/start', {
+                const endpoint = conversationId ? '/api/chat' : '/api/start';
+                const response = await fetch(endpoint, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ query })
+                    body: JSON.stringify({ 
+                        message: message,
+                        conversation_id: conversationId 
+                    })
                 });
                 
                 const data = await response.json();
@@ -384,62 +285,12 @@
                     return;
                 }
                 
-                conversationId = data.conversation_id;
-                awaitingApproval = data.awaiting_approval;
+                if (!conversationId) {
+                    conversationId = data.conversation_id;
+                }
                 
                 addMessage('assistant', data.response);
-                updateStage(data.stage_number, data.stage_description);
-                
                 setLoading(false);
-                toggleInputMode(awaitingApproval);
-                
-            } catch (error) {
-                showError('Error: ' + error.message);
-                setLoading(false);
-            }
-        }
-        
-        async function approve(approval) {
-            if (!conversationId) {
-                showError('No active conversation');
-                return;
-            }
-            
-            addMessage('user', approval === 'y' ? 'Yes, approved ✓' : 'No, rejected ✗');
-            setLoading(true);
-            
-            try {
-                const response = await fetch('/api/approve', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ approval })
-                });
-                
-                const data = await response.json();
-                
-                if (data.error) {
-                    showError(data.error);
-                    setLoading(false);
-                    return;
-                }
-                
-                if (data.rejected) {
-                    addMessage('system', data.message, true);
-                    setLoading(false);
-                    toggleInputMode(false);
-                    conversationId = null;
-                } else if (data.completed) {
-                    addMessage('system', data.message, true);
-                    setLoading(false);
-                    toggleInputMode(false);
-                    conversationId = null;
-                } else if (data.response) {
-                    addMessage('assistant', data.response);
-                    updateStage(data.stage_number, data.stage_description);
-                    awaitingApproval = data.awaiting_approval;
-                    setLoading(false);
-                    toggleInputMode(awaitingApproval);
-                }
                 
             } catch (error) {
                 showError('Error: ' + error.message);
@@ -459,7 +310,7 @@
         // Allow Enter key to send message
         document.getElementById('userInput').addEventListener('keypress', function(e) {
             if (e.key === 'Enter') {
-                sendQuery();
+                sendMessage();
             }
         });
     </script>

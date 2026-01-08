@@ -1,7 +1,7 @@
 import os
 from flask import Flask, request, jsonify, render_template, session
 from dotenv import load_dotenv
-from services.gpt_service import GPTService
+from services.mock_gpt_service import MockGPTService
 from services.workflow_manager import WorkflowManager
 from database.db_manager import DBManager
 
@@ -15,7 +15,7 @@ app.secret_key = os.getenv('FLASK_SECRET_KEY', 'dev-secret-key-change-in-product
 
 # Initialize services
 db_manager = DBManager(os.getenv('DATABASE_PATH', 'database/chatbot.db'))
-gpt_service = GPTService(os.getenv('OPENAI_API_KEY'))
+gpt_service = MockGPTService()  # Using mock service for testing
 workflow_manager = WorkflowManager(gpt_service, db_manager)
 
 
@@ -27,50 +27,44 @@ def index():
 
 @app.route('/api/start', methods=['POST'])
 def start_conversation():
-    """Start a new conversation and workflow."""
+    """Start a new conversation."""
     data = request.get_json()
-    user_query = data.get('query', '').strip()
+    user_message = data.get('message', '').strip()
     
-    if not user_query:
-        return jsonify({'error': 'Query is required'}), 400
-    
-    # Create new conversation
-    conversation_id = db_manager.create_conversation()
-    session['conversation_id'] = conversation_id
+    if not user_message:
+        session['conversation_id'] = conversation_id
     
     try:
-        # Start workflow
-        result = workflow_manager.start_workflow(conversation_id, user_query)
+        # Start workflow with initial message
+        result = workflow_manager.process_message(conversation_id, user_message)
         
         return jsonify({
             'conversation_id': conversation_id,
-            'stage': result['stage'],
-            'stage_number': result['stage_number'],
-            'stage_description': result['stage_description'],
-            'response': result['response'],
-            'awaiting_approval': result['awaiting_approval']
+            'response': result['response']
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/api/approve', methods=['POST'])
-def approve_stage():
-    """Process user approval for current stage."""
+@app.route('/api/chat', methods=['POST'])
+def chat():
+    """Continue conversation."""
     data = request.get_json()
-    approval = data.get('approval', '').strip().lower()
+    user_message = data.get('message', '').strip()
     conversation_id = session.get('conversation_id')
     
     if not conversation_id:
         return jsonify({'error': 'No active conversation'}), 400
     
-    if approval not in ['y', 'n']:
-        return jsonify({'error': 'Approval must be "y" or "n"'}), 400
+    if not user_message:
+        return jsonify({'error': 'Message is required'}), 400
     
     try:
-        result = workflow_manager.process_approval(conversation_id, approval)
+        result = workflow_manager.process_message(conversation_id, user_message)
         
-        return jsonify(result)
+        return jsonify({
+            'response': result['response']
+        })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -95,27 +89,16 @@ def get_history():
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/api/conversations', methods=['GET'])
-def get_conversations():
-    """Get all conversations."""
-    try:
-        conversations = db_manager.get_all_conversations()
-        return jsonify({'conversations': conversations})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-
 @app.route('/api/reset', methods=['POST'])
 def reset_conversation():
     """Reset the current conversation."""
     session.pop('conversation_id', None)
-    return jsonify({'message': 'Conversation reset successfully'})
+    return jsonify({'status': 'reset'})
 
 
-@app.route('/health', methods=['GET'])
-def health_check():
-    """Health check endpoint."""
-    return jsonify({'status': 'healthy', 'service': 'Flask Chatbot with 3-Stage Workflow'})
+if __name__ == '__main__':
+    app.run(debug=True, host='0.0.0.0', port=5000)
+
 
 
 if __name__ == '__main__':
