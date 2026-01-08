@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3-Stage Chatbot - PhD Study</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 900px;
+            width: 100%;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 25px 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 24px;
+            margin-bottom: 8px;
+        }
+        
+        .header p {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+        
+        .stage-indicator {
+            background: #f8f9fa;
+            padding: 15px 30px;
+            border-bottom: 2px solid #e9ecef;
+            display: none;
+        }
+        
+        .stage-indicator.active {
+            display: block;
+        }
+        
+        .stage-info {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        
+        .stage-badge {
+            display: inline-block;
+            padding: 6px 12px;
+            background: #667eea;
+            color: white;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        
+        .stage-description {
+            font-size: 14px;
+            color: #495057;
+        }
+        
+        .chat-area {
+            height: 400px;
+            overflow-y: auto;
+            padding: 20px 30px;
+            background: #f8f9fa;
+        }
+        
+        .message {
+            margin-bottom: 20px;
+            animation: fadeIn 0.3s ease-in;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .message-header {
+            font-weight: bold;
+            margin-bottom: 5px;
+            font-size: 13px;
+            color: #495057;
+        }
+        
+        .message-content {
+            padding: 12px 15px;
+            border-radius: 10px;
+            line-height: 1.5;
+            font-size: 14px;
+        }
+        
+        .message.user .message-content {
+            background: #667eea;
+            color: white;
+            margin-left: 60px;
+        }
+        
+        .message.assistant .message-content {
+            background: white;
+            color: #212529;
+            margin-right: 60px;
+            border: 1px solid #dee2e6;
+        }
+        
+        .message.system .message-content {
+            background: #fff3cd;
+            color: #856404;
+            text-align: center;
+            font-style: italic;
+            border: 1px solid #ffc107;
+        }
+        
+        .input-area {
+            padding: 20px 30px;
+            background: white;
+            border-top: 2px solid #e9ecef;
+        }
+        
+        .input-group {
+            display: flex;
+            gap: 10px;
+        }
+        
+        #userInput {
+            flex: 1;
+            padding: 12px 15px;
+            border: 2px solid #dee2e6;
+            border-radius: 8px;
+            font-size: 14px;
+            font-family: inherit;
+        }
+        
+        #userInput:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        button {
+            padding: 12px 24px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: background 0.3s;
+        }
+        
+        button:hover {
+            background: #5568d3;
+        }
+        
+        button:disabled {
+            background: #adb5bd;
+            cursor: not-allowed;
+        }
+        
+        .approval-buttons {
+            display: none;
+            gap: 10px;
+        }
+        
+        .approval-buttons.active {
+            display: flex;
+        }
+        
+        .btn-approve {
+            background: #28a745;
+        }
+        
+        .btn-approve:hover {
+            background: #218838;
+        }
+        
+        .btn-reject {
+            background: #dc3545;
+        }
+        
+        .btn-reject:hover {
+            background: #c82333;
+        }
+        
+        .btn-reset {
+            background: #6c757d;
+        }
+        
+        .btn-reset:hover {
+            background: #5a6268;
+        }
+        
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 15px;
+            color: #6c757d;
+            font-style: italic;
+        }
+        
+        .loading.active {
+            display: block;
+        }
+        
+        .error-message {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 12px 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            border: 1px solid #f5c6cb;
+            display: none;
+        }
+        
+        .error-message.active {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🤖 3-Stage Confirmation Chatbot</h1>
+            <p>Multi-stage AI conversation with user approval at each step</p>
+        </div>
+        
+        <div class="stage-indicator" id="stageIndicator">
+            <div class="stage-info">
+                <div>
+                    <span class="stage-badge" id="stageBadge">Stage 1/3</span>
+                </div>
+                <div class="stage-description" id="stageDescription">
+                    Awaiting your query...
+                </div>
+            </div>
+        </div>
+        
+        <div class="chat-area" id="chatArea">
+            <div class="message system">
+                <div class="message-content">
+                    Welcome! Enter your query to start the 3-stage workflow.
+                    <br><br>
+                    <strong>Stage 1:</strong> Source Check - Validate information sources
+                    <br>
+                    <strong>Stage 2:</strong> Content Structure - Organize the response
+                    <br>
+                    <strong>Stage 3:</strong> Final Approval - Complete answer
+                </div>
+            </div>
+        </div>
+        
+        <div class="input-area">
+            <div class="error-message" id="errorMessage"></div>
+            <div class="loading" id="loading">🔄 Processing...</div>
+            
+            <div class="input-group" id="queryInput">
+                <input type="text" id="userInput" placeholder="Enter your question..." />
+                <button onclick="sendQuery()">Send</button>
+                <button class="btn-reset" onclick="resetChat()">Reset</button>
+            </div>
+            
+            <div class="approval-buttons" id="approvalButtons">
+                <button class="btn-approve" onclick="approve('y')">✓ Approve (y)</button>
+                <button class="btn-reject" onclick="approve('n')">✗ Reject (n)</button>
+                <button class="btn-reset" onclick="resetChat()">Reset</button>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        let conversationId = null;
+        let awaitingApproval = false;
+        
+        function addMessage(role, content, isSystem = false) {
+            const chatArea = document.getElementById('chatArea');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${isSystem ? 'system' : role}`;
+            
+            let header = '';
+            if (!isSystem) {
+                header = role === 'user' ? 'You' : 'Assistant';
+            }
+            
+            messageDiv.innerHTML = `
+                ${header ? `<div class="message-header">${header}</div>` : ''}
+                <div class="message-content">${content.replace(/\n/g, '<br>')}</div>
+            `;
+            
+            chatArea.appendChild(messageDiv);
+            chatArea.scrollTop = chatArea.scrollHeight;
+        }
+        
+        function updateStage(stageNumber, description) {
+            const indicator = document.getElementById('stageIndicator');
+            const badge = document.getElementById('stageBadge');
+            const desc = document.getElementById('stageDescription');
+            
+            indicator.classList.add('active');
+            badge.textContent = `Stage ${stageNumber}/3`;
+            desc.textContent = description;
+        }
+        
+        function setLoading(isLoading) {
+            const loading = document.getElementById('loading');
+            const queryInput = document.getElementById('queryInput');
+            const approvalButtons = document.getElementById('approvalButtons');
+            
+            if (isLoading) {
+                loading.classList.add('active');
+                queryInput.style.display = 'none';
+                approvalButtons.classList.remove('active');
+            } else {
+                loading.classList.remove('active');
+            }
+        }
+        
+        function showError(message) {
+            const errorDiv = document.getElementById('errorMessage');
+            errorDiv.textContent = message;
+            errorDiv.classList.add('active');
+            setTimeout(() => errorDiv.classList.remove('active'), 5000);
+        }
+        
+        function toggleInputMode(isApproval) {
+            const queryInput = document.getElementById('queryInput');
+            const approvalButtons = document.getElementById('approvalButtons');
+            
+            if (isApproval) {
+                queryInput.style.display = 'none';
+                approvalButtons.classList.add('active');
+            } else {
+                queryInput.style.display = 'flex';
+                approvalButtons.classList.remove('active');
+            }
+        }
+        
+        async function sendQuery() {
+            const input = document.getElementById('userInput');
+            const query = input.value.trim();
+            
+            if (!query) {
+                showError('Please enter a question');
+                return;
+            }
+            
+            addMessage('user', query);
+            input.value = '';
+            setLoading(true);
+            
+            try {
+                const response = await fetch('/api/start', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query })
+                });
+                
+                const data = await response.json();
+                
+                if (data.error) {
+                    showError(data.error);
+                    setLoading(false);
+                    return;
+                }
+                
+                conversationId = data.conversation_id;
+                awaitingApproval = data.awaiting_approval;
+                
+                addMessage('assistant', data.response);
+                updateStage(data.stage_number, data.stage_description);
+                
+                setLoading(false);
+                toggleInputMode(awaitingApproval);
+                
+            } catch (error) {
+                showError('Error: ' + error.message);
+                setLoading(false);
+            }
+        }
+        
+        async function approve(approval) {
+            if (!conversationId) {
+                showError('No active conversation');
+                return;
+            }
+            
+            addMessage('user', approval === 'y' ? 'Yes, approved ✓' : 'No, rejected ✗');
+            setLoading(true);
+            
+            try {
+                const response = await fetch('/api/approve', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ approval })
+                });
+                
+                const data = await response.json();
+                
+                if (data.error) {
+                    showError(data.error);
+                    setLoading(false);
+                    return;
+                }
+                
+                if (data.rejected) {
+                    addMessage('system', data.message, true);
+                    setLoading(false);
+                    toggleInputMode(false);
+                    conversationId = null;
+                } else if (data.completed) {
+                    addMessage('system', data.message, true);
+                    setLoading(false);
+                    toggleInputMode(false);
+                    conversationId = null;
+                } else if (data.response) {
+                    addMessage('assistant', data.response);
+                    updateStage(data.stage_number, data.stage_description);
+                    awaitingApproval = data.awaiting_approval;
+                    setLoading(false);
+                    toggleInputMode(awaitingApproval);
+                }
+                
+            } catch (error) {
+                showError('Error: ' + error.message);
+                setLoading(false);
+            }
+        }
+        
+        async function resetChat() {
+            try {
+                await fetch('/api/reset', { method: 'POST' });
+                location.reload();
+            } catch (error) {
+                showError('Error resetting: ' + error.message);
+            }
+        }
+        
+        // Allow Enter key to send message
+        document.getElementById('userInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                sendQuery();
+            }
+        });
+    </script>
+</body>
+</html>
