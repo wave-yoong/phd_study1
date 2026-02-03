@@ -326,14 +326,24 @@
             
             try {
                 const endpoint = conversationId ? '/api/chat' : '/api/start';
+                const body = conversationId 
+                    ? { message: message }
+                    : { query: message };
+                
                 const response = await fetch(endpoint, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        message: message,
-                        conversation_id: conversationId 
-                    })
+                    credentials: 'same-origin',
+                    body: JSON.stringify(body)
                 });
+                
+                // 상태 코드 확인
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    showError(`Server error (${response.status}): ${errorText}`);
+                    setLoading(false);
+                    return;
+                }
                 
                 const data = await response.json();
                 

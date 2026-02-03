@@ -195,30 +195,4 @@ class WorkflowManager:
     def _get_stage_description(self, stage: str) -> str:
         """Get human-readable description of workflow stage."""
         return self.STAGE_DESCRIPTIONS.get(stage, 'Processing')
-        self,
-        conversation_id: int,
-        messages: list
-    ) -> Dict[str, Any]:
-        """
-        Determine current workflow stage based on conversation history.
-        
-        Stage progression logic:
-        - Stage 1 (source_planning): Initial query or early discussion
-        - Stage 2 (structure_proposal): After user confirms approach (2-4 messages)
-        - Stage 3 (final_answer): After user confirms structure (5+ messages)
-        """
-        message_count = len(messages)
-        
-        # Get latest workflow state
-        latest_state = self.db_manager.get_latest_workflow_state(conversation_id)
-        
-        if message_count <= 2:
-            # Initial stage: understanding and source planning
-            return {'stage': 'source_planning', 'stage_number': 1}
-        elif message_count <= 4:
-            # Second stage: content structuring
-            return {'stage': 'structure_proposal', 'stage_number': 2}
-        else:
-            # Final stage: complete answer
-            return {'stage': 'final_answer', 'stage_number': 3}
 
