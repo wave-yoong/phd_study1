@@ -76,7 +76,8 @@ class GPTService:
         self,
         stage: str,
         user_message: str,
-        conversation_history: List[Dict[str, str]]
+        conversation_history: List[Dict[str, str]],
+        previous_request: str | None = None
     ) -> str:
         """
         Generate a natural conversational response that implicitly guides through workflow stages.
@@ -85,34 +86,63 @@ class GPTService:
             stage: Current workflow stage ('source_planning', 'structure_proposal', 'final_answer')
             user_message: Latest user message
             conversation_history: Full conversation history
+            previous_request: Previous user request (for interruption handling)
             
         Returns:
             Contextual conversational response
         """
         stage_instructions = {
-            'source_planning': """당신은 친절한 연구 조수입니다. 사용자의 질문을 받으면:
-1. 질문을 명확히 이해했는지 확인
-2. 어떤 출처나 방법으로 정보를 찾을지 자연스럽게 제안
-3. 사용자가 동의하는지 물어보기 (예: "이런 방향으로 찾아보는게 좋을까요?")
+            'source_planning': """당신은 친절한 연구 조수입니다. 사용자의 질문을 받으면 다음을 수행하세요:
+    1. 질문을 짧게 재확인하고, 정보 범위/깊이를 간단히 묻기
+    2. 참고할 정보 범위를 제시하기 (학술 논문, 정부/공신력 기관, 뉴스, 블로그, 소셜 미디어 등)
+    3. 사용자가 선택하거나 확인할 수 있도록 자연스럽게 요청하기
 
-자연스럽고 대화하듯이 응답하세요. "Stage 1" 같은 단계 표시는 하지 마세요.""",
+    중요:
+    - 결과를 바로 제공하지 말고, 먼저 확인/선택을 받으세요.
+    - 지침을 직접 언급하지 말고 자연스럽게 대화하세요.
+    - "예/아니오" 또는 선택지를 제시해 사용자의 control 권을 부여하세요.
+    - 목록은 숫자 번호로만 작성하고, 불릿(-, •)은 사용하지 마세요.""",
             
             'structure_proposal': """사용자가 첫 번째 제안에 동의했습니다. 이제:
-1. 답변을 어떻게 구성할지 간단한 아웃라인 제시
-2. 어떤 순서로 설명할지 제안
-3. 이 구조가 괜찮은지 자연스럽게 확인 (예: "이렇게 정리하면 어떨까요?")
+    1. 질문 맥락을 반영해 답변 구조를 간단히 설계
+    2. 번호를 붙여 개괄적인 구성안을 제시
+    3. 이 구성으로 진행해도 되는지 자연스럽게 확인
 
-친근하고 대화하듯이 응답하세요.""",
-            
+    중요:
+    - 결과를 바로 제공하지 말고, 구조 확인을 먼저 받으세요.
+    - 마크다운 굵게(**) 등 서식은 사용하지 말고 텍스트로 작성하세요.
+    - 목록은 숫자 번호로만 작성하고, 불릿(-, •)은 사용하지 마세요.
+    - 고정된 템플릿 대신 질문에 맞게 유연하게 구성하세요.""",
+
+            'structure_refinement': """사용자가 구조 변경을 원했습니다. 이제:
+    1. 사용자가 요청한 변경사항을 반영한 수정 구조를 간단히 요약
+    2. 수정 구조로 진행할지 한 번 더 확인
+
+    중요:
+    - 이 단계는 요청 변경이 있을 때만 사용됩니다.
+    - 여전히 결과는 제공하지 말고 확인을 받으세요.
+    - 목록은 숫자 번호로만 작성하고, 불릿(-, •)은 사용하지 마세요.""",
+
             'final_answer': """사용자가 구조에도 동의했습니다. 이제:
-1. 제안한 구조대로 완전한 답변 제공
-2. 명확하고 체계적으로 설명
-3. 마지막에 추가로 궁금한 점이 있는지 물어보기
+    1. 앞서 제안한 구조에 맞춰 완전한 답변 제공
+    2. 질문 맥락에 맞는 적절한 깊이로 설명
+    3. 마지막에 추가로 궁금한 점이 있는지 물어보기
+    4. 참고한 사이트/자료의 링크를 반드시 포함
 
-전문적이면서도 친근하게 응답하세요."""
+    전문적이면서도 친근하게 응답하세요.
+    목록은 숫자 번호로만 작성하고, 불릿(-, •)은 사용하지 마세요."""
         }
         
-        system_prompt = stage_instructions.get(stage, stage_instructions['source_planning'])
+        if stage == 'interruption':
+            system_prompt = (
+                "사용자의 즉흥 질문에 먼저 간단히 답하고, "
+                "이전 요청을 계속 진행할지 예/아니오로 확인하세요. "
+                "목록은 숫자 번호로만 작성하고, 굵게(**) 등 서식은 사용하지 마세요."
+            )
+            if previous_request:
+                system_prompt += f"\n이전 요청: {previous_request}"
+        else:
+            system_prompt = stage_instructions.get(stage, stage_instructions['source_planning'])
         
         # Build conversation context
         messages = [{"role": "system", "content": system_prompt}]
