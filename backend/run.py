@@ -17,14 +17,27 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
-# Determine if we should use demo mode
-DEMO_MODE = os.getenv('DEMO_MODE', 'false').lower() == 'true'
+# Determine service to use
+USE_AZURE = os.getenv('USE_AZURE', 'true').lower() == 'true'
+AZURE_OPENAI_API_KEY = os.getenv('AZURE_OPENAI_API_KEY', '')
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '')
+DEMO_MODE = os.getenv('DEMO_MODE', 'false').lower() == 'true'
+
+# Logging
+if USE_AZURE:
+    print(f"Azure OpenAI configured: {'yes' if AZURE_OPENAI_API_KEY else 'no'}")
+    print(f"Endpoint: {os.getenv('AZURE_OPENAI_ENDPOINT', 'Not set')}")
+    print(f"Deployment: {os.getenv('AZURE_OPENAI_DEPLOYMENT_NAME', 'Not set')}")
+else:
+    print(f"OpenAI API Key present: {'yes' if OPENAI_API_KEY else 'no'}")
 
 # If no API key and not in demo mode, enable demo mode automatically
-if not OPENAI_API_KEY and not DEMO_MODE:
-    print("⚠️  No OPENAI_API_KEY found. Running in DEMO MODE.")
-    print("   Set OPENAI_API_KEY in .env to use real OpenAI API.")
+if not (AZURE_OPENAI_API_KEY if USE_AZURE else OPENAI_API_KEY) and not DEMO_MODE:
+    print("⚠️  No API key found. Running in DEMO MODE.")
+    if USE_AZURE:
+        print("   Set AZURE_OPENAI_API_KEY, AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_DEPLOYMENT_NAME in .env to use Azure OpenAI.")
+    else:
+        print("   Set OPENAI_API_KEY in .env to use OpenAI API.")
     DEMO_MODE = True
 
 # Import appropriate GPT service
@@ -33,7 +46,10 @@ if DEMO_MODE:
     print("🎭 Running in DEMO MODE with mock responses")
 else:
     from services.gpt_service import GPTService
-    print("🚀 Running in PRODUCTION MODE with OpenAI API")
+    if USE_AZURE:
+        print("🚀 Running with Azure OpenAI API")
+    else:
+        print("🚀 Running with OpenAI API")
 
 from services.workflow_manager import WorkflowManager
 from database.db_manager import DBManager
@@ -45,7 +61,13 @@ app.secret_key = os.getenv('FLASK_SECRET_KEY', 'dev-secret-key-change-in-product
 
 # Initialize services
 db_manager = DBManager(os.getenv('DATABASE_PATH', 'database/chatbot.db'))
-gpt_service = GPTService(OPENAI_API_KEY if not DEMO_MODE else None)
+if DEMO_MODE:
+    gpt_service = GPTService()
+else:
+    gpt_service = GPTService(
+        api_key=AZURE_OPENAI_API_KEY if USE_AZURE else OPENAI_API_KEY,
+        use_azure=USE_AZURE
+    )
 workflow_manager = WorkflowManager(gpt_service, db_manager)
 
 
@@ -79,7 +101,8 @@ def start_conversation():
             'stage_description': result['stage_description'],
             'response': result['response'],
             'awaiting_approval': result['awaiting_approval'],
-            'demo_mode': DEMO_MODE
+            'demo_mode': DEMO_MODE,
+            'service': 'Azure OpenAI' if USE_AZURE and not DEMO_MODE else ('OpenAI' if not DEMO_MODE else 'Mock')
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -146,9 +169,11 @@ def reset_conversation():
 @app.route('/health', methods=['GET'])
 def health_check():
     """Health check endpoint."""
+    service_type = 'Azure OpenAI' if USE_AZURE and not DEMO_MODE else ('OpenAI' if not DEMO_MODE else 'Mock')
     return jsonify({
         'status': 'healthy',
         'service': 'Flask Chatbot with 3-Stage Workflow',
+        'service_type': service_type,
         'demo_mode': DEMO_MODE
     })
 
@@ -157,7 +182,12 @@ if __name__ == '__main__':
     print("\n" + "=" * 60)
     print("Flask 3-Stage Chatbot Server")
     print("=" * 60)
-    print(f"Mode: {'DEMO (Mock Responses)' if DEMO_MODE else 'PRODUCTION (OpenAI API)'}")
+    if DEMO_MODE:
+        print(f"Mode: DEMO (Mock Responses)")
+    elif USE_AZURE:
+        print(f"Mode: PRODUCTION (Azure OpenAI API)")
+    else:
+        print(f"Mode: PRODUCTION (OpenAI API)")
     print(f"URL: http://localhost:5000")
     print("=" * 60 + "\n")
     

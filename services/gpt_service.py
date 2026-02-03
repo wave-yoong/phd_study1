@@ -1,18 +1,48 @@
 import os
-from openai import OpenAI
+import sys
+from openai import AzureOpenAI, OpenAI
 from typing import List, Dict
 
 
 class GPTService:
-    """Service for interacting with OpenAI GPT API."""
+    """Service for interacting with Azure OpenAI or OpenAI GPT API."""
     
-    def __init__(self, api_key: str = None):
-        """Initialize GPT service with API key."""
-        self.api_key = api_key or os.getenv('OPENAI_API_KEY')
-        if not self.api_key:
-            raise ValueError("OpenAI API key not provided")
-        self.client = OpenAI(api_key=self.api_key)
-        self.model = "gpt-3.5-turbo"
+    def __init__(self, api_key: str = None, use_azure: bool = True):
+        """Initialize GPT service with API key.
+        
+        Args:
+            api_key: OpenAI or Azure API key
+            use_azure: Whether to use Azure OpenAI (default: True)
+        """
+        self.use_azure = use_azure
+        
+        if use_azure:
+            # Azure OpenAI configuration
+            self.api_key = api_key or os.getenv('AZURE_OPENAI_API_KEY')
+            self.endpoint = os.getenv('AZURE_OPENAI_ENDPOINT')
+            self.deployment = os.getenv('AZURE_OPENAI_DEPLOYMENT_NAME')
+            self.api_version = os.getenv('AZURE_OPENAI_API_VERSION', '2024-02-15-preview')
+            
+            if not all([self.api_key, self.endpoint, self.deployment]):
+                raise ValueError("Azure OpenAI configuration incomplete. Check AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_KEY, and AZURE_OPENAI_DEPLOYMENT_NAME")
+            
+            try:
+                self.client = AzureOpenAI(
+                    api_key=self.api_key,
+                    api_version=self.api_version,
+                    azure_endpoint=self.endpoint
+                )
+                self.model = self.deployment
+            except Exception as e:
+                print(f"Error initializing Azure OpenAI: {e}", file=sys.stderr)
+                raise
+        else:
+            # Standard OpenAI configuration
+            self.api_key = api_key or os.getenv('OPENAI_API_KEY')
+            if not self.api_key:
+                raise ValueError("OpenAI API key not provided")
+            self.client = OpenAI(api_key=self.api_key)
+            self.model = "gpt-3.5-turbo"
     
     def generate_response(
         self,
