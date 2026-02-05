@@ -77,6 +77,12 @@ def index():
     return render_template('index.html')
 
 
+@app.route('/favicon.ico')
+def favicon():
+    """Handle favicon requests."""
+    return '', 204
+
+
 @app.route('/api/start', methods=['POST'])
 def start_conversation():
     """Start a new conversation and workflow."""
@@ -103,6 +109,32 @@ def start_conversation():
             'awaiting_approval': result['awaiting_approval'],
             'demo_mode': DEMO_MODE,
             'service': 'Azure OpenAI' if USE_AZURE and not DEMO_MODE else ('OpenAI' if not DEMO_MODE else 'Mock')
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/chat', methods=['POST'])
+def chat():
+    """Continue conversation."""
+    data = request.get_json()
+    user_message = data.get('message', '').strip()
+    conversation_id = session.get('conversation_id')
+    
+    if not conversation_id:
+        return jsonify({'error': 'No active conversation'}), 400
+    
+    if not user_message:
+        return jsonify({'error': 'Message is required'}), 400
+    
+    try:
+        result = workflow_manager.process_message(conversation_id, user_message)
+        
+        return jsonify({
+            'response': result['response'],
+            'stage': result.get('stage'),
+            'stage_number': result.get('stage_number'),
+            'awaiting_approval': result.get('awaiting_approval', False)
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500

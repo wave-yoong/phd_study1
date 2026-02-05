@@ -25,22 +25,36 @@ def index():
     return render_template('index.html')
 
 
+@app.route('/favicon.ico')
+def favicon():
+    """Handle favicon requests."""
+    return '', 204
+
+
 @app.route('/api/start', methods=['POST'])
 def start_conversation():
-    """Start a new conversation."""
+    """Start a new conversation and workflow."""
     data = request.get_json()
-    user_message = data.get('message', '').strip()
+    user_query = data.get('query', '').strip()
     
-    if not user_message:
-        session['conversation_id'] = conversation_id
+    if not user_query:
+        return jsonify({'error': 'Query is required'}), 400
+    
+    # Create new conversation
+    conversation_id = db_manager.create_conversation()
+    session['conversation_id'] = conversation_id
     
     try:
-        # Start workflow with initial message
-        result = workflow_manager.process_message(conversation_id, user_message)
+        # Start workflow
+        result = workflow_manager.start_workflow(conversation_id, user_query)
         
         return jsonify({
             'conversation_id': conversation_id,
-            'response': result['response']
+            'stage': result['stage'],
+            'stage_number': result['stage_number'],
+            'stage_description': result['stage_description'],
+            'response': result['response'],
+            'awaiting_approval': result['awaiting_approval']
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -63,8 +77,32 @@ def chat():
         result = workflow_manager.process_message(conversation_id, user_message)
         
         return jsonify({
-            'response': result['response']
+            'response': result['response'],
+            'stage': result.get('stage'),
+            'stage_number': result.get('stage_number'),
+            'awaiting_approval': result.get('awaiting_approval', False)
         })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/approve', methods=['POST'])
+def approve_stage():
+    """Process user approval for current stage."""
+    data = request.get_json()
+    approval = data.get('approval', '').strip().lower()
+    conversation_id = session.get('conversation_id')
+    
+    if not conversation_id:
+        return jsonify({'error': 'No active conversation'}), 400
+    
+    if approval not in ['y', 'n']:
+        return jsonify({'error': 'Approval must be "y" or "n"'}), 400
+    
+    try:
+        result = workflow_manager.process_approval(conversation_id, approval)
+        
+        return jsonify(result)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -93,12 +131,7 @@ def get_history():
 def reset_conversation():
     """Reset the current conversation."""
     session.pop('conversation_id', None)
-    return jsonify({'status': 'reset'})
-
-
-if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
-
+    return jsonify({'message': 'Conversation reset successfully'})
 
 
 if __name__ == '__main__':
