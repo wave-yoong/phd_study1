@@ -103,6 +103,16 @@
             border: none;
         }
         
+        .message-content a {
+            color: #10a37f;
+            text-decoration: underline;
+            word-break: break-all;
+        }
+        
+        .message-content a:hover {
+            color: #0d8c6d;
+        }
+        
         .message.system .message-content {
             background: #f7f7f8;
             color: #6e6e80;
@@ -268,6 +278,12 @@
     <script>
         let conversationId = null;
         
+        function convertLinksToClickable(text) {
+            // URL을 클릭 가능한 링크로 변환
+            const urlPattern = /(https?:\/\/[^\s<]+[^<.,;:!?\s)])/g;
+            return text.replace(urlPattern, '<a href="$1" target="_blank" rel="noopener noreferrer" style="color: #10a37f; text-decoration: underline;">$1</a>');
+        }
+
         function addMessage(role, content, isSystem = false) {
             const chatArea = document.getElementById('chatArea');
             const messageDiv = document.createElement('div');
@@ -279,9 +295,12 @@
             }
             // Assistant 메시지는 header 없이 표시
             
+            // 개행을 <br>로 변환하고 URL을 클릭 가능한 링크로 변환
+            const processedContent = convertLinksToClickable(content.replace(/\n/g, '<br>'));
+            
             messageDiv.innerHTML = `
                 ${header ? `<div class="message-header">${header}</div>` : ''}
-                <div class="message-content">${content.replace(/\n/g, '<br>')}</div>
+                <div class="message-content">${processedContent}</div>
             `;
             
             chatArea.appendChild(messageDiv);
