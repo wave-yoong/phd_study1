@@ -64,7 +64,7 @@ class WorkflowManager:
 
         # Update latest workflow state approval if applicable
         latest_state = self.db_manager.get_latest_workflow_state(conversation_id)
-        if latest_state and user_approval in ("yes", "no"):
+        if latest_state and user_approval in ("yes", "no", "selection"):
             self.db_manager.update_workflow_approval(latest_state["id"], user_approval)
 
         # Get conversation history
@@ -151,7 +151,8 @@ class WorkflowManager:
             stage = previous_state.get('stage') if previous_state else 'source_planning'
 
         if stage == 'source_planning':
-            if user_approval == 'yes':
+            # User selected sources or approved → move to structure proposal
+            if user_approval in ('yes', 'selection'):
                 return {'stage': 'structure_proposal', 'stage_number': 2}
             return {'stage': 'source_planning', 'stage_number': 1}
 
@@ -160,6 +161,7 @@ class WorkflowManager:
                 return {'stage': 'final_answer', 'stage_number': 3}
             if user_approval == 'no':
                 return {'stage': 'structure_refinement', 'stage_number': 2}
+            # If user just provided feedback without clear yes/no, stay in proposal
             return {'stage': 'structure_proposal', 'stage_number': 2}
 
         if stage == 'structure_refinement':
@@ -181,15 +183,40 @@ class WorkflowManager:
         return {}
 
     def _classify_user_approval(self, user_message: str) -> str:
-        """Classify user approval intent (yes/no/unknown)."""
+        """
+        Classify user approval intent (yes/no/selection/unknown).
+        
+        Returns:
+            'yes': User approves/confirms
+            'no': User rejects or wants changes
+            'selection': User is making a selection (numbers, lists)
+            'unknown': Unclear intent (becomes 'yes' for stage progression)
+        """
         message = user_message.strip().lower()
-        yes_patterns = ["예", "네", "응", "그래", "좋아", "okay", "ok", "y", "yes"]
-        no_patterns = ["아니", "아니오", "아니요", "싫", "n", "no"]
-
-        if any(token in message for token in yes_patterns):
-            return "yes"
+        
+        # Check for explicit rejections first
+        no_patterns = ["아니", "아니오", "아니요", "싫", "변경", "수정", "바꿔", "다시", "n", "no"]
         if any(token in message for token in no_patterns):
             return "no"
+        
+        # Check for explicit approvals
+        yes_patterns = ["예", "네", "응", "그래", "좋아", "okay", "ok", "y", "yes", "진행", "맞아", "동의"]
+        if any(token in message for token in yes_patterns):
+            return "yes"
+        
+        # Check if user is making a selection (contains numbers or selection keywords)
+        import re
+        has_numbers = bool(re.search(r'\d', message))
+        selection_keywords = ["선택", "번", "원해", "하겠", "부탁"]
+        has_selection = any(keyword in message for keyword in selection_keywords)
+        
+        if has_numbers or has_selection:
+            return "selection"
+        
+        # If unclear but user provided a meaningful response, treat as approval for progression
+        if len(message) > 3:  # Response longer than a few characters
+            return "yes"
+        
         return "unknown"
     
     def _get_stage_description(self, stage: str) -> str:
