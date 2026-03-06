@@ -199,7 +199,16 @@ class WorkflowManager:
         if any(token in message for token in no_patterns):
             return "no"
         
+        # Check if user is making a selection with numbers first (e.g. '1,2번 위주로', '2번으로')
+        import re
+        has_numbers = bool(re.search(r'\d', message))
+        selection_keywords = ["선택", "번", "원해", "하겠", "부탁"]
+        has_selection = any(keyword in message for keyword in selection_keywords)
+        if has_numbers or has_selection:
+            return "selection"
+        
         # Check for structure modification requests (should be treated as "no")
+        # Only applies when there are no numbers (i.e., not a source selection)
         modification_patterns = [
             "위주로", "중심으로", "중심으", "먼저", "우선", "대신", "만 ",
             "추가", "빼고", "빼줘", "제외", "말고", "포함", "넣어",
@@ -214,14 +223,7 @@ class WorkflowManager:
         if any(token in message for token in yes_patterns):
             return "yes"
         
-        # Check if user is making a selection (contains numbers or selection keywords)
-        import re
-        has_numbers = bool(re.search(r'\d', message))
-        selection_keywords = ["선택", "번", "원해", "하겠", "부탁"]
-        has_selection = any(keyword in message for keyword in selection_keywords)
-        
-        if has_numbers or has_selection:
-            return "selection"
+        # (selection check already handled above)
         
         # If unclear but user provided a meaningful response, treat as unknown (not auto-yes)
         # This prevents unintended progression when user provides feedback
