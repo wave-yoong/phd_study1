@@ -161,8 +161,8 @@ class WorkflowManager:
                 return {'stage': 'final_answer', 'stage_number': 3}
             if user_approval == 'no':
                 return {'stage': 'structure_refinement', 'stage_number': 2}
-            # If user just provided feedback without clear yes/no, stay in proposal
-            return {'stage': 'structure_proposal', 'stage_number': 2}
+            # If user provided feedback without clear yes (unknown), treat as refinement request
+            return {'stage': 'structure_refinement', 'stage_number': 2}
 
         if stage == 'structure_refinement':
             if user_approval == 'yes':
@@ -199,8 +199,18 @@ class WorkflowManager:
         if any(token in message for token in no_patterns):
             return "no"
         
-        # Check for explicit approvals
+        # Check for structure modification requests (should be treated as "no")
+        modification_patterns = [
+            "위주로", "중심으로", "중심으", "먼저", "우선", "대신", "만 ",
+            "추가", "빼고", "빼줘", "제외", "말고", "포함", "넣어",
+            "순서", "바꿔", "바꿔서", "바꿔줘"
+        ]
+        if any(pattern in message for pattern in modification_patterns):
+            return "no"
+        
+        # Check for explicit approvals (must come after modification check)
         yes_patterns = ["예", "네", "응", "그래", "좋아", "okay", "ok", "y", "yes", "진행", "맞아", "동의"]
+        # Only return yes if approval word appears without modification patterns
         if any(token in message for token in yes_patterns):
             return "yes"
         
@@ -213,10 +223,8 @@ class WorkflowManager:
         if has_numbers or has_selection:
             return "selection"
         
-        # If unclear but user provided a meaningful response, treat as approval for progression
-        if len(message) > 3:  # Response longer than a few characters
-            return "yes"
-        
+        # If unclear but user provided a meaningful response, treat as unknown (not auto-yes)
+        # This prevents unintended progression when user provides feedback
         return "unknown"
     
     def _get_stage_description(self, stage: str) -> str:
