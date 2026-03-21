@@ -71,6 +71,26 @@ else:
 workflow_manager = WorkflowManager(gpt_service, db_manager)
 
 
+def _build_choices_for_stage(stage: str):
+    """Return frontend-friendly selectable choices by workflow stage."""
+    if stage == 'source_planning':
+        return [
+            {'id': '1', 'label': '학술 논문', 'value': '1번 학술 논문으로 진행해줘'},
+            {'id': '2', 'label': '정부/공신력 기관', 'value': '2번 정부/공신력 기관 자료로 진행해줘'},
+            {'id': '3', 'label': '뉴스', 'value': '3번 뉴스 자료로 진행해줘'},
+            {'id': '4', 'label': '블로그/소셜', 'value': '4번 블로그 및 소셜 미디어 자료로 진행해줘'},
+            {'id': 'custom', 'label': '기타 (직접 입력)', 'value': ''}
+        ]
+
+    if stage in ('structure_proposal', 'final_confirmation', 'interruption'):
+        return [
+            {'id': 'yes', 'label': '예', 'value': '예'},
+            {'id': 'no', 'label': '아니오/수정 요청', 'value': '아니오, 수정하고 싶어'}
+        ]
+
+    return []
+
+
 @app.route('/')
 def index():
     """Serve the main chatbot interface."""
@@ -107,6 +127,7 @@ def start_conversation():
             'stage_description': result['stage_description'],
             'response': result['response'],
             'awaiting_approval': result['awaiting_approval'],
+            'choices': _build_choices_for_stage(result.get('stage')),
             'demo_mode': DEMO_MODE,
             'service': 'Azure OpenAI' if USE_AZURE and not DEMO_MODE else ('OpenAI' if not DEMO_MODE else 'Mock')
         })
@@ -134,7 +155,8 @@ def chat():
             'response': result['response'],
             'stage': result.get('stage'),
             'stage_number': result.get('stage_number'),
-            'awaiting_approval': result.get('awaiting_approval', False)
+            'awaiting_approval': result.get('awaiting_approval', False),
+            'choices': _build_choices_for_stage(result.get('stage'))
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -155,7 +177,8 @@ def approve_stage():
     
     try:
         result = workflow_manager.process_approval(conversation_id, approval)
-        
+
+        result['choices'] = _build_choices_for_stage(result.get('stage'))
         return jsonify(result)
     except Exception as e:
         return jsonify({'error': str(e)}), 500

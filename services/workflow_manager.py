@@ -11,6 +11,7 @@ class WorkflowManager:
         'structure_proposal',
         'structure_refinement',
         'interruption',
+        'final_confirmation',
         'final_answer'
     ]
 
@@ -19,6 +20,7 @@ class WorkflowManager:
         'structure_proposal': 'Proposing answer structure',
         'structure_refinement': 'Refining answer structure',
         'interruption': 'Answering an interruption and confirming resumption',
+        'final_confirmation': 'Confirming final answer structure',
         'final_answer': 'Providing final answer'
     }
     
@@ -59,13 +61,28 @@ class WorkflowManager:
         # Store user message
         self.db_manager.add_message(conversation_id, 'user', user_message)
 
-        # Determine approval intent from user message
-        user_approval = self._classify_user_approval(user_message)
+        latest_state = self.db_manager.get_latest_workflow_state(conversation_id)
+        current_stage = latest_state.get('stage') if latest_state else None
+        if current_stage == 'interruption':
+            previous_state = self._get_last_non_interruption_state(conversation_id)
+            current_stage = previous_state.get('stage') if previous_state else 'source_planning'
+
+        # Determine approval intent from user message (stage-aware)
+        user_approval = self._classify_user_approval(user_message, current_stage)
 
         # Update latest workflow state approval if applicable
-        latest_state = self.db_manager.get_latest_workflow_state(conversation_id)
         if latest_state and user_approval in ("yes", "no", "selection"):
             self.db_manager.update_workflow_approval(latest_state["id"], user_approval)
+            # Store source selection if in source_planning stage
+            if current_stage == 'source_planning' and user_approval == "selection":
+                conn = self.db_manager.get_connection()
+                cursor = conn.cursor()
+                cursor.execute(
+                    'UPDATE workflow_state SET source_selection = ? WHERE id = ?',
+                    (user_message, latest_state["id"])
+                )
+                conn.commit()
+                conn.close()
 
         # Get conversation history
         messages = self.db_manager.get_conversation_messages(conversation_id)
@@ -99,7 +116,12 @@ class WorkflowManager:
                 'stage_description': self._get_stage_description('interruption')
             }
 
-        workflow_state = self._determine_workflow_stage(conversation_id, latest_state, user_approval)
+        # If final_answer was the last stage, start new conversation
+        if latest_state and latest_state.get('stage') == 'final_answer':
+            # Reset to source planning for new question
+            workflow_state = {'stage': 'source_planning', 'stage_number': 1}
+        else:
+            workflow_state = self._determine_workflow_stage(conversation_id, latest_state, user_approval)
 
         # Generate contextual response based on workflow stage
         response = self.gpt_service.generate_conversational_response(
@@ -166,8 +188,15 @@ class WorkflowManager:
 
         if stage == 'structure_refinement':
             if user_approval == 'yes':
-                return {'stage': 'final_answer', 'stage_number': 3}
+                return {'stage': 'final_confirmation', 'stage_number': 3}
             return {'stage': 'structure_refinement', 'stage_number': 2}
+
+        if stage == 'final_confirmation':
+            if user_approval == 'yes':
+                return {'stage': 'final_answer', 'stage_number': 4}
+            if user_approval == 'no':
+                return {'stage': 'structure_refinement', 'stage_number': 2}
+            return {'stage': 'final_confirmation', 'stage_number': 3}
 
         if stage == 'final_answer':
             return {'stage': 'source_planning', 'stage_number': 1}
@@ -182,7 +211,7 @@ class WorkflowManager:
                 return item
         return {}
 
-    def _classify_user_approval(self, user_message: str) -> str:
+    def _classify_user_approval(self, user_message: str, current_stage: str = None) -> str:
         """
         Classify user approval intent (yes/no/selection/unknown).
         
@@ -194,17 +223,25 @@ class WorkflowManager:
         """
         message = user_message.strip().lower()
         
+        # In refinement stage, only explicit yes should advance.
+        # All other inputs are treated as modification feedback.
+        if current_stage == 'structure_refinement':
+            yes_patterns_refine = ["예", "네", "응", "그래", "좋아", "okay", "ok", "y", "yes", "진행", "맞아", "동의"]
+            if any(token in message for token in yes_patterns_refine):
+                return "yes"
+            return "no"
+
         # Check for explicit rejections first
         no_patterns = ["아니", "아니오", "아니요", "싫", "변경", "수정", "바꿔", "다시", "n", "no"]
         if any(token in message for token in no_patterns):
             return "no"
         
-        # Check if user is making a selection with numbers first (e.g. '1,2번 위주로', '2번으로')
+        # Number-based selection is only valid during source planning stage
         import re
         has_numbers = bool(re.search(r'\d', message))
         selection_keywords = ["선택", "번", "원해", "하겠", "부탁"]
         has_selection = any(keyword in message for keyword in selection_keywords)
-        if has_numbers or has_selection:
+        if current_stage in (None, 'source_planning') and (has_numbers or has_selection):
             return "selection"
         
         # Check for structure modification requests (should be treated as "no")
@@ -228,7 +265,7 @@ class WorkflowManager:
         # If unclear but user provided a meaningful response, treat as unknown (not auto-yes)
         # This prevents unintended progression when user provides feedback
         return "unknown"
-    
+
     def _get_stage_description(self, stage: str) -> str:
         """Get human-readable description of workflow stage."""
         return self.STAGE_DESCRIPTIONS.get(stage, 'Processing')

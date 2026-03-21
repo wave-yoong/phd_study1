@@ -102,6 +102,106 @@
             color: #202123;
             border: none;
         }
+
+        .message-content strong {
+            font-weight: 700;
+            color: #202123;
+        }
+
+        .choice-panel {
+            margin-top: 10px;
+            border: 1px solid #e5e7eb;
+            border-radius: 14px;
+            overflow: hidden;
+            background: #ffffff;
+        }
+
+        .choice-item {
+            width: 100%;
+            border: none;
+            border-top: 1px solid #f1f2f4;
+            background: #ffffff;
+            color: #202123;
+            padding: 12px 14px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            justify-content: flex-start;
+            border-radius: 0;
+            font-size: 14px;
+            font-weight: 500;
+            text-align: left;
+            cursor: pointer;
+        }
+
+        .choice-item:first-child {
+            border-top: none;
+        }
+
+        .choice-item:hover {
+            background: #f7f7f8;
+            border-color: #f1f2f4;
+        }
+
+        .choice-item.selected {
+            background: #eef8f5;
+        }
+
+        .choice-item.selected .choice-index {
+            background: #10a37f;
+            color: #ffffff;
+        }
+
+        .choice-item:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            background: #fafafa;
+            color: #6e6e80;
+        }
+
+        .choice-index {
+            width: 26px;
+            height: 26px;
+            border-radius: 999px;
+            background: #f3f4f6;
+            color: #4b5563;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 13px;
+            font-weight: 600;
+            flex-shrink: 0;
+        }
+
+        .choice-label {
+            flex: 1;
+        }
+
+        .choice-input-hint {
+            margin-top: 8px;
+            font-size: 12px;
+            color: #8e8ea0;
+        }
+
+        .choice-actions {
+            margin-top: 10px;
+            display: flex;
+            justify-content: flex-end;
+        }
+
+        .choice-submit {
+            padding: 8px 12px;
+            font-size: 13px;
+            background: #10a37f;
+            color: #ffffff;
+            border: 1px solid #0d8c6d;
+        }
+
+        .choice-submit:hover {
+            background: #0d8c6d;
+            border-color: #0d8c6d;
+            color: #ffffff;
+        }
         
         .message-content a {
             color: #10a37f;
@@ -279,12 +379,120 @@
         let conversationId = null;
         
         function convertLinksToClickable(text) {
+            // **text** 형식을 <strong>text</strong>로 변환 (먼저 처리)
+            text = text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+            
             // URL을 클릭 가능한 링크로 변환
             const urlPattern = /(https?:\/\/[^\s<]+[^<.,;:!?\s)])/g;
-            return text.replace(urlPattern, '<a href="$1" target="_blank" rel="noopener noreferrer" style="color: #10a37f; text-decoration: underline;">$1</a>');
+            text = text.replace(urlPattern, '<a href="$1" target="_blank" rel="noopener noreferrer" style="color: #10a37f; text-decoration: underline;">$1</a>');
+            
+            return text;
         }
 
-        function addMessage(role, content, isSystem = false) {
+        function disableAllChoiceButtons() {
+            document.querySelectorAll('.choice-item, .choice-submit').forEach(button => {
+                button.disabled = true;
+            });
+        }
+
+        function renderChoices(container, choices) {
+            if (!Array.isArray(choices) || choices.length === 0) {
+                return;
+            }
+
+            const numberedChoices = choices.filter(choice => /^\d+$/.test(String(choice.id || '')));
+            const hasCustomInputChoice = choices.some(choice => !((choice.value || '').trim()));
+            const isMultiSelect = numberedChoices.length >= 2 && hasCustomInputChoice;
+            const selectedNumberIds = new Set();
+
+            const panel = document.createElement('div');
+            panel.className = 'choice-panel';
+
+            choices.forEach((choice, index) => {
+                const button = document.createElement('button');
+                button.className = 'choice-item';
+                button.type = 'button';
+                button.innerHTML = `
+                    <span class="choice-index">${choice.id && /^\d+$/.test(choice.id) ? choice.id : (index + 1)}</span>
+                    <span class="choice-label">${choice.label || ''}</span>
+                `;
+
+                button.addEventListener('click', () => {
+                    if (button.disabled) return;
+
+                    if (isMultiSelect && /^\d+$/.test(String(choice.id || ''))) {
+                        const id = String(choice.id);
+                        if (selectedNumberIds.has(id)) {
+                            selectedNumberIds.delete(id);
+                            button.classList.remove('selected');
+                        } else {
+                            selectedNumberIds.add(id);
+                            button.classList.add('selected');
+                        }
+                        return;
+                    }
+
+                    const value = (choice.value || '').trim();
+                    if (!value) {
+                        const input = document.getElementById('userInput');
+                        input.focus();
+                        return;
+                    }
+
+                    const input = document.getElementById('userInput');
+                    input.value = value;
+                    sendMessage();
+                });
+
+                panel.appendChild(button);
+            });
+
+            container.appendChild(panel);
+
+            if (isMultiSelect) {
+                const actions = document.createElement('div');
+                actions.className = 'choice-actions';
+
+                const submitBtn = document.createElement('button');
+                submitBtn.type = 'button';
+                submitBtn.className = 'choice-submit';
+                submitBtn.textContent = '선택 완료';
+
+                submitBtn.addEventListener('click', () => {
+                    if (submitBtn.disabled) return;
+
+                    if (selectedNumberIds.size === 0) {
+                        showError('하나 이상 선택해주세요');
+                        return;
+                    }
+
+                    const selected = Array.from(selectedNumberIds)
+                        .map(v => Number(v))
+                        .sort((a, b) => a - b)
+                        .map(v => `${v}번`)
+                        .join(', ');
+
+                    const input = document.getElementById('userInput');
+                    input.value = `${selected} 자료로 진행해줘`;
+                    sendMessage();
+                });
+
+                actions.appendChild(submitBtn);
+                container.appendChild(actions);
+            }
+
+            const hasCustomInput = hasCustomInputChoice;
+            if (hasCustomInput) {
+                const hint = document.createElement('div');
+                hint.className = 'choice-input-hint';
+                hint.textContent = isMultiSelect
+                    ? '번호 옵션은 여러 개 선택 후 선택 완료를 눌러주세요. 기타는 직접 입력할 수 있어요.'
+                    : '기타를 선택하면 직접 입력할 수 있어요.';
+                container.appendChild(hint);
+            }
+        }
+
+        function addMessage(role, content, isSystem = false, choices = []) {
             const chatArea = document.getElementById('chatArea');
             const messageDiv = document.createElement('div');
             messageDiv.className = `message ${isSystem ? 'system' : role}`;
@@ -302,6 +510,10 @@
                 ${header ? `<div class="message-header">${header}</div>` : ''}
                 <div class="message-content">${processedContent}</div>
             `;
+
+            if (!isSystem && role === 'assistant') {
+                renderChoices(messageDiv, choices);
+            }
             
             chatArea.appendChild(messageDiv);
             chatArea.scrollTop = chatArea.scrollHeight;
@@ -329,6 +541,29 @@
             errorDiv.classList.add('active');
             setTimeout(() => errorDiv.classList.remove('active'), 5000);
         }
+
+        function isApprovalPromptInRefinement(text) {
+            if (!text) return false;
+            return /진행해도 될까요|괜찮으신가요|동의하시나요|예\/?y|예\s*\/\s*y|승인|드려도|답변을 드려도/.test(text);
+        }
+
+        function getRenderableChoices(data) {
+            const apiChoices = Array.isArray(data.choices) ? data.choices : [];
+            if (apiChoices.length > 0) {
+                return apiChoices;
+            }
+
+            // 구조 수정 단계에서는 기본적으로 주관식 입력을 받되,
+            // 답변이 승인(예/아니오) 확인 문구일 때만 빠른 선택지를 노출
+            if (data.stage === 'structure_refinement' && isApprovalPromptInRefinement(data.response || '')) {
+                return [
+                    { id: 'yes', label: '예', value: '예' },
+                    { id: 'no', label: '아니오/추가 수정', value: '아니오, 추가 수정하고 싶어' }
+                ];
+            }
+
+            return [];
+        }
         
         async function sendMessage() {
             const input = document.getElementById('userInput');
@@ -338,6 +573,8 @@
                 showError('메시지를 입력해주세요');
                 return;
             }
+
+            disableAllChoiceButtons();
             
             addMessage('user', message);
             input.value = '';
@@ -376,7 +613,7 @@
                     conversationId = data.conversation_id;
                 }
                 
-                addMessage('assistant', data.response);
+                addMessage('assistant', data.response, false, getRenderableChoices(data));
                 setLoading(false);
                 
             } catch (error) {

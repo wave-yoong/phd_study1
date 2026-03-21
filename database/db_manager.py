@@ -53,6 +53,7 @@ class DBManager:
                 user_input TEXT,
                 gpt_response TEXT,
                 user_approval TEXT,
+                source_selection TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (conversation_id) REFERENCES conversations (id)
             )
@@ -110,16 +111,17 @@ class DBManager:
         stage: str,
         user_input: Optional[str] = None,
         gpt_response: Optional[str] = None,
-        user_approval: Optional[str] = None
+        user_approval: Optional[str] = None,
+        source_selection: Optional[str] = None
     ) -> int:
         """Add a workflow state entry."""
         conn = self.get_connection()
         cursor = conn.cursor()
         cursor.execute(
             '''INSERT INTO workflow_state 
-               (conversation_id, stage, user_input, gpt_response, user_approval) 
-               VALUES (?, ?, ?, ?, ?)''',
-            (conversation_id, stage, user_input, gpt_response, user_approval)
+               (conversation_id, stage, user_input, gpt_response, user_approval, source_selection) 
+               VALUES (?, ?, ?, ?, ?, ?)''',
+            (conversation_id, stage, user_input, gpt_response, user_approval, source_selection)
         )
         state_id = cursor.lastrowid
         conn.commit()

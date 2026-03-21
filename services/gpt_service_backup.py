@@ -77,7 +77,8 @@ class GPTService:
         stage: str,
         user_message: str,
         conversation_history: List[Dict[str, str]],
-        previous_request: Optional[str] = None
+        previous_request: Optional[str] = None,
+        source_selection: Optional[str] = None
     ) -> str:
         """
         Generate a natural conversational response that implicitly guides through workflow stages.
@@ -87,6 +88,7 @@ class GPTService:
             user_message: Latest user message
             conversation_history: Full conversation history
             previous_request: Previous user request (for interruption handling)
+            source_selection: User's selected source types
             
         Returns:
             Contextual conversational response
@@ -145,36 +147,17 @@ class GPTService:
 - 구조 항목은 3-5개가 적당합니다.""",
 
             'structure_refinement': """사용자가 구조 변경을 원했습니다.
-
 1. 사용자가 요청한 변경사항 이해 및 확인
 2. 이전 전체 구조를 기반으로 사용자 요청을 반영한 완전한 전체 구조를 다시 제시
-   - 기존 항목 중 유지할 것은 그대로 유지
-   - 사용자가 요청한 수정/추가/삭제/순서 변경 반영
-   - 항목 순서도 사용자 요청에 맞게 조정
-
-중요 규칙(포함/기반 표현 처리):
-- 사용자가 "이 내용을 포함해서", "이런 내용을 기반으로" 같은 표현을 쓰면,
-  해당 내용은 독립 대항목으로 분리하지 말고 관련 상위 항목의 하위 항목으로 배치
-- 하위 항목 표기는 숫자 번호(예: 3.1, 3.2)를 쓰지 말고 리스팅 형식으로 작성
-  예: "- 식단 제안", "- 운동 계획", "- 수면 습관"
-- 상위 항목은 기존처럼 숫자 번호 유지, 하위 항목만 리스팅 형식 사용
-
-구조 제시 시 간결성 유지:
-- 각 항목은 명확한 제목만 제시 (괄호나 설명적 부연 절대 금지)
-- 예시: "5. 기타" (o) / "5. 기타 (난기류와의 관계 등)" (x)
-- 사용자 요청을 충분히 반영하는 주요 항목들로 구성
-- 설명이 필요한 세부내용은 최종 답변 단계에서만 제공
-
+   - 사용자가 "이 내용을 포함해서", "이런 내용을 기반으로" 같은 표현을 쓰면, 해당 내용을 하위 항목으로 배치
+   - 하위 항목은 숫자 번호 대신 리스팅 형식(-)으로 작성
 3. 승인 확인: "예/y를 입력하시면 답변 드리겠습니다."
 
-중요:
-- 여전히 결과는 제공하지 말고 전체 구조 확인만 받으세요.
-- 일부만 보여주지 말고, 처음부터 끝까지 전체 구조를 모두 나열하세요.
-- 사용자 요청을 정확히 반영하되, 전체 맥락을 유지하세요.
+규칙:
+- 각 항목은 명확한 제목만 제시 (괄호 설명 금지)
 - 목록의 상위 항목은 숫자 번호로 작성
 - 하위 항목은 숫자 번호 대신 리스팅 형식(-)으로 작성
-- 각 항목은 명확한 제목만 제시 (괄호 설명 금지)
-- 볼드체(**, __), 이탤릭체(*, _) 등 마크다운 서식 절대 사용 금지""",
+- 마크다운 서식 절대 사용 금지""",
 
             'final_confirmation': """사용자가 최종 구조를 승인했습니다.
 
@@ -190,7 +173,8 @@ class GPTService:
 
             'final_answer': """사용자가 최종 답변 제공에 동의했습니다. 이제 완전한 답변을 제공하세요.
 
-제안한 구조에 맞춰 자연스럽게 작성하세요.
+**중요: 사용자가 선택한 자료 유형 기반으로 작성**
+- 제안한 구조에 맞춰 자연스럽게 작성
 - 일반 텍스트 형식 유지 (마크다운 서식 사용 금지)
 - 마지막에 사용자 피드백 요청으로 마무리"""
         }
@@ -224,4 +208,3 @@ class GPTService:
         })
         
         return self.generate_response(messages, temperature=0.7, max_tokens=800)
-
