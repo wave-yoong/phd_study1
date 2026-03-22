@@ -88,6 +88,12 @@ def _build_choices_for_stage(stage: str):
             {'id': 'no', 'label': '아니오/수정 요청', 'value': '아니오, 수정하고 싶어'}
         ]
 
+    if stage == 'post_final_followup':
+        return [
+            {'id': 'yes', 'label': '예', 'value': '예'},
+            {'id': 'no', 'label': '아니오', 'value': '아니오'}
+        ]
+
     return []
 
 

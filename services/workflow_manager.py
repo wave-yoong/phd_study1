@@ -12,7 +12,10 @@ class WorkflowManager:
         'structure_refinement',
         'interruption',
         'final_confirmation',
-        'final_answer'
+        'final_answer',
+        'post_final_followup',
+        'post_final_input',
+        'conversation_closed'
     ]
 
     STAGE_DESCRIPTIONS = {
@@ -21,7 +24,10 @@ class WorkflowManager:
         'structure_refinement': 'Refining answer structure',
         'interruption': 'Answering an interruption and confirming resumption',
         'final_confirmation': 'Confirming final answer structure',
-        'final_answer': 'Providing final answer'
+        'final_answer': 'Providing final answer',
+        'post_final_followup': 'Checking if more information is needed',
+        'post_final_input': 'Waiting for additional user instructions',
+        'conversation_closed': 'Conversation closed'
     }
     
     def __init__(self, gpt_service: GPTService, db_manager: DBManager):
@@ -70,6 +76,85 @@ class WorkflowManager:
         # Determine approval intent from user message (stage-aware)
         user_approval = self._classify_user_approval(user_message, current_stage)
 
+        # Post-final follow-up: ask whether user wants additional info/modification
+        if current_stage == 'post_final_followup':
+            if user_approval == 'yes':
+                response = '추가하거나 수정하고자 하시는 내용을 적어주세요.'
+                self.db_manager.add_message(conversation_id, 'assistant', response)
+                self.db_manager.add_workflow_state(
+                    conversation_id=conversation_id,
+                    stage='post_final_input',
+                    user_input=user_message,
+                    gpt_response=response,
+                    user_approval='yes'
+                )
+                return {
+                    'response': response,
+                    'stage': 'post_final_input',
+                    'stage_number': 6,
+                    'awaiting_approval': True,
+                    'stage_description': self._get_stage_description('post_final_input')
+                }
+
+            if user_approval == 'no':
+                response = '감사합니다! 새로운 주제로 탐색하길 원하시면 New Chat 를 눌러주세요!'
+                self.db_manager.add_message(conversation_id, 'assistant', response)
+                self.db_manager.add_workflow_state(
+                    conversation_id=conversation_id,
+                    stage='conversation_closed',
+                    user_input=user_message,
+                    gpt_response=response,
+                    user_approval='no'
+                )
+                return {
+                    'response': response,
+                    'stage': 'conversation_closed',
+                    'stage_number': 7,
+                    'awaiting_approval': False,
+                    'stage_description': self._get_stage_description('conversation_closed')
+                }
+
+            response = '정보를 추가로 받길 원하시나요? 예/아니오로 답해주세요.'
+            self.db_manager.add_message(conversation_id, 'assistant', response)
+            self.db_manager.add_workflow_state(
+                conversation_id=conversation_id,
+                stage='post_final_followup',
+                user_input=user_message,
+                gpt_response=response,
+                user_approval='unknown'
+            )
+            return {
+                'response': response,
+                'stage': 'post_final_followup',
+                'stage_number': 5,
+                'awaiting_approval': True,
+                'stage_description': self._get_stage_description('post_final_followup')
+            }
+
+        # User provided additional instructions after final answer
+        if current_stage == 'post_final_input':
+            response = self.gpt_service.generate_conversational_response(
+                stage='final_answer',
+                user_message=user_message,
+                conversation_history=self.db_manager.get_conversation_messages(conversation_id)
+            )
+            response = response + '\n\n정보를 추가로 받길 원하시나요?'
+
+            self.db_manager.add_message(conversation_id, 'assistant', response)
+            self.db_manager.add_workflow_state(
+                conversation_id=conversation_id,
+                stage='post_final_followup',
+                user_input=user_message,
+                gpt_response=response
+            )
+            return {
+                'response': response,
+                'stage': 'post_final_followup',
+                'stage_number': 5,
+                'awaiting_approval': True,
+                'stage_description': self._get_stage_description('post_final_followup')
+            }
+
         # Update latest workflow state approval if applicable
         if latest_state and user_approval in ("yes", "no", "selection"):
             self.db_manager.update_workflow_approval(latest_state["id"], user_approval)
@@ -116,8 +201,8 @@ class WorkflowManager:
                 'stage_description': self._get_stage_description('interruption')
             }
 
-        # If final_answer was the last stage, start new conversation
-        if latest_state and latest_state.get('stage') == 'final_answer':
+        # If conversation was explicitly closed, next user message starts a new flow
+        if latest_state and latest_state.get('stage') == 'conversation_closed':
             # Reset to source planning for new question
             workflow_state = {'stage': 'source_planning', 'stage_number': 1}
         else:
@@ -133,20 +218,28 @@ class WorkflowManager:
         # Store assistant response
         self.db_manager.add_message(conversation_id, 'assistant', response)
         
+        # After final answer, immediately ask whether user wants additional info
+        saved_stage = workflow_state['stage']
+        saved_stage_number = workflow_state['stage_number']
+        if workflow_state['stage'] == 'final_answer':
+            response = response + '\n\n정보를 추가로 받길 원하시나요?'
+            saved_stage = 'post_final_followup'
+            saved_stage_number = 5
+
         # Update workflow state
         self.db_manager.add_workflow_state(
             conversation_id=conversation_id,
-            stage=workflow_state['stage'],
+            stage=saved_stage,
             user_input=user_message,
             gpt_response=response
         )
         
         return {
             'response': response,
-            'stage': workflow_state['stage'],
-            'stage_number': workflow_state['stage_number'],
+            'stage': saved_stage,
+            'stage_number': saved_stage_number,
             'awaiting_approval': True,
-            'stage_description': self._get_stage_description(workflow_state['stage'])
+            'stage_description': self._get_stage_description(saved_stage)
         }
     
     def _determine_workflow_stage(

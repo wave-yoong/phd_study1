@@ -58,6 +58,12 @@ class DBManager:
                 FOREIGN KEY (conversation_id) REFERENCES conversations (id)
             )
         ''')
+
+        # Migration for existing DBs created before source_selection was added
+        cursor.execute("PRAGMA table_info(workflow_state)")
+        workflow_columns = [row[1] for row in cursor.fetchall()]
+        if 'source_selection' not in workflow_columns:
+            cursor.execute('ALTER TABLE workflow_state ADD COLUMN source_selection TEXT')
         
         conn.commit()
         conn.close()
@@ -117,12 +123,25 @@ class DBManager:
         """Add a workflow state entry."""
         conn = self.get_connection()
         cursor = conn.cursor()
-        cursor.execute(
-            '''INSERT INTO workflow_state 
-               (conversation_id, stage, user_input, gpt_response, user_approval, source_selection) 
-               VALUES (?, ?, ?, ?, ?, ?)''',
-            (conversation_id, stage, user_input, gpt_response, user_approval, source_selection)
-        )
+        try:
+            cursor.execute(
+                '''INSERT INTO workflow_state 
+                   (conversation_id, stage, user_input, gpt_response, user_approval, source_selection) 
+                   VALUES (?, ?, ?, ?, ?, ?)''',
+                (conversation_id, stage, user_input, gpt_response, user_approval, source_selection)
+            )
+        except sqlite3.OperationalError as e:
+            # Backward compatibility if column is still missing for any reason
+            if 'no column named source_selection' in str(e):
+                cursor.execute(
+                    '''INSERT INTO workflow_state 
+                       (conversation_id, stage, user_input, gpt_response, user_approval) 
+                       VALUES (?, ?, ?, ?, ?)''',
+                    (conversation_id, stage, user_input, gpt_response, user_approval)
+                )
+            else:
+                conn.close()
+                raise
         state_id = cursor.lastrowid
         conn.commit()
         conn.close()
