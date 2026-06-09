@@ -78,6 +78,12 @@
             margin-top: 14px;
         }
 
+        .build-tag {
+            margin-top: 10px;
+            font-size: 11px;
+            color: #9aa6a0;
+        }
+
         .start-btn {
             background: #10a37f;
             color: #ffffff;
@@ -731,6 +737,7 @@
                         <div class="scenario-start">
                             <button type="button" class="start-btn" onclick="startPlanning()">AI 에이전트와 루틴 설계 시작하기</button>
                         </div>
+                        <div class="build-tag" id="buildTag"></div>
                     </div>
                 </div>
             </div>
@@ -753,6 +760,14 @@
     </div>
     
     <script>
+        // Bump this whenever the UI changes so we can confirm the running build.
+        const BUILD = 'wellness-build-6 · grid+body-widget+goal-adaptive';
+        console.log('[study] UI ' + BUILD);
+        window.addEventListener('DOMContentLoaded', () => {
+            const t = document.getElementById('buildTag');
+            if (t) t.textContent = BUILD;
+        });
+
         let conversationId = null;
 
         // Experimental condition can be set via ?group=control or ?group=auto.
