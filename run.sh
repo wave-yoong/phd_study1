@@ -1,40 +1,31 @@
 #!/bin/bash
-# Simple script to run the Flask chatbot application
+# Launch the AI diet-planning agent (PhD Study 1 - Effect of User Control)
+# Usage:
+#   ./run.sh demo   # demo mode, no API key needed (mock agent)
+#   ./run.sh        # real LLM (uses Azure/OpenAI creds from .env)
 
 echo "======================================"
-echo "Flask 3-Stage Chatbot Starter"
+echo "AI Diet Planner Agent"
 echo "======================================"
 echo ""
 
-# Check if .env file exists
+# Create .env from template if missing
 if [ ! -f .env ]; then
-    echo "⚠️  .env file not found. Creating from .env.example..."
+    echo "⚠️  .env not found. Creating from .env.example..."
     cp .env.example .env
-    echo "✓ Created .env file"
-    echo ""
-    echo "Please edit .env and add your OPENAI_API_KEY"
-    echo "Or run in DEMO mode (see below)"
+    echo "✓ Created .env (edit it to add your API key for production mode)"
     echo ""
 fi
 
-# Check which mode to run
+# Run from the repository root so package imports and DATABASE_PATH resolve.
 if [ "$1" = "demo" ] || [ "$1" = "--demo" ]; then
-    echo "🎭 Starting in DEMO MODE (mock responses)"
+    echo "🎭 DEMO MODE (mock agent, no API key needed)"
+    echo "   Open http://localhost:5000   (?group=control or ?group=auto to force a condition)"
     echo ""
-    cd backend && DEMO_MODE=true python run.py
+    USE_MOCK_GPT=1 python -m backend.app
 else
-    # Check if OPENAI_API_KEY is set
-    if grep -q "your_openai_api_key_here" .env 2>/dev/null; then
-        echo "⚠️  OPENAI_API_KEY not set in .env file"
-        echo ""
-        echo "Options:"
-        echo "  1. Edit .env and add your OpenAI API key"
-        echo "  2. Run in DEMO mode: ./run.sh demo"
-        echo ""
-        exit 1
-    fi
-    
-    echo "🚀 Starting in PRODUCTION MODE (OpenAI API)"
+    echo "🚀 PRODUCTION MODE (real LLM via Azure/OpenAI)"
+    echo "   Open http://localhost:5000   (?group=control or ?group=auto to force a condition)"
     echo ""
-    cd backend && python run.py
+    python -m backend.app
 fi

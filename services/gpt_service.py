@@ -4,28 +4,126 @@ from openai import AzureOpenAI, OpenAI
 from typing import List, Dict, Optional
 
 
+# ---------------------------------------------------------------------------
+# Diet / exercise planning AGENT prompts (PhD Study 1 - Effect of User Control)
+#
+# The agent plans a 2-week diet + exercise + daily routine "on behalf of" the
+# participant. It runs a pipeline of simulated tools and, in the autonomous
+# condition, makes proactive decisions and simply reports them. The user-control
+# condition exposes checkpoints, interruption, item override, and an autonomy
+# dial on the FRONTEND; the prompts below only shape the agent's tone per phase.
+# ---------------------------------------------------------------------------
+
+AGENT_PERSONA = """당신은 사용자의 다이어트 목표를 대신 달성해 주는 AI 에이전트입니다.
+사용자는 2주 뒤 체중 감량을 목표로 하고 있고, 당신은 식단·운동·일상 계획을 직접 설계합니다.
+
+작동 방식:
+- 당신은 여러 내부 도구(칼로리 계산기, 식단 데이터베이스, 운동 루틴 설계기, 일정 편성기, 장보기 리스트 생성기)를 사용해 작업합니다.
+- 단순히 정보를 알려주는 조수가 아니라, 계획을 실제로 '짜서 산출물로 내놓는' 에이전트처럼 행동하세요.
+
+전역 규칙:
+- 마크다운 서식(**, __, *, #, 표 기호 |) 절대 사용 금지. 일반 텍스트로만 작성하세요.
+- 목록 상위 항목은 숫자 번호, 하위 항목은 하이픈(-)으로 작성하세요.
+- 의학적 안전: 무리한 단식이나 위험한 급격한 감량을 권하지 말고, 건강한 범위(주당 약 0.5~1kg)를 전제로 계획하세요. 필요 시 짧게 안전 안내를 덧붙이세요.
+- 답변은 간결하게. 한 단계에서 다음 단계 내용까지 미리 전부 쏟아내지 마세요."""
+
+# Tone differences between the two experimental conditions.
+CONDITION_MODIFIERS = {
+    'auto': """[자율 모드]
+당신은 사용자에게 일일이 묻지 않고 스스로 판단해 결정을 내리고, 그 결정을 '통보'합니다.
+- "~로 정했습니다", "~하게 구성했습니다", "다음 단계로 넘어가겠습니다" 처럼 이미 실행한 것처럼 말하세요.
+- 사용자에게 승인을 구하지 마세요. 선택지를 묻지 마세요.
+- 당신이 어떤 가정을 했고 어떤 결정을 내렸는지 짧게 알려주세요.""",
+    'control': """[사용자 통제 모드]
+당신은 각 단계의 결과를 사용자에게 보여주고, 사용자가 검토·수정·중단할 수 있게 합니다.
+- 결과 제시 후 "이대로 진행할까요, 아니면 수정할 부분이 있나요?" 처럼 통제권을 사용자에게 넘기세요.
+- 사용자가 특정 항목 변경을 요청하면 그 부분만 정확히 반영하세요.
+- 사용자가 '알아서 진행해'라고 하면 더 이상 묻지 말고 남은 단계를 자율적으로 진행하세요.""",
+}
+
+# Autonomy dial (only meaningful for the control condition; 'auto' is always high).
+AUTONOMY_MODIFIERS = {
+    'low': "\n사용자가 단계별로 확인하길 원합니다. 한 단계만 처리하고 멈춰서 사용자 응답을 기다리세요.",
+    'high': "\n사용자가 자율 진행을 허용했습니다. 남은 단계를 알아서 이어서 처리하고 결과만 통보하세요.",
+}
+
+PHASE_INSTRUCTIONS = {
+    'intake': """[단계: 목표 확인 및 제약 수집]
+사용자의 다이어트 목표를 한 줄로 재확인하고, 계획 설계에 필요한 핵심 제약을 물어보세요.
+- 음식 선호/비선호, 알레르기나 못 먹는 음식
+- 운동 가능한 요일과 하루 가능 시간
+- 참고할 현재 신체 정보(키/몸무게/활동량)는 선택 사항이며, 답하지 않으면 일반적인 가정을 쓰겠다고 안내
+질문은 3~4개 이내로 짧게. 아직 계획 내용은 만들지 마세요.""",
+
+    'calc': """[도구 실행: 칼로리 계산기]
+사용자 정보(없으면 일반적 가정)를 바탕으로 하루 권장 섭취 칼로리와 목표 소모 칼로리, 대략적인 영양 비율(탄단지)을 산출해 제시하세요.
+- 어떤 가정을 썼는지 한 줄로 밝히세요.
+- 2주간 건강한 감량 목표치를 현실적으로 제시하세요(무리한 수치 금지).
+숫자와 근거만 간단히. 식단 메뉴는 아직 만들지 마세요.""",
+
+    'meal': """[도구 실행: 식단 데이터베이스]
+앞서 계산한 칼로리 목표에 맞춰 식단 구성 방향과 대표 끼니 예시(아침/점심/저녁/간식)를 제시하세요.
+- 사용자의 음식 선호/제약을 반영하세요.
+- 아직 14일 전체를 나열하지 말고, 구성 원칙과 하루 샘플 정도만 보여주세요.""",
+
+    'workout': """[도구 실행: 운동 루틴 설계기]
+2주 운동 루틴의 구성 원칙과 요일 배치 방향, 대표 운동 예시를 제시하세요.
+- 사용자의 운동 가능 요일/시간을 반영하세요.
+- 휴식일을 어디에 둘지 당신이 판단해 제안/결정하세요.""",
+
+    'schedule': """[도구 실행: 일정 편성기]
+지금까지의 식단/운동을 합쳐 2주(14일) 일자별 계획을 편성하세요.
+- 1일차부터 14일차까지, 각 날에 [식단 요약 / 운동 / 일상 팁]을 한두 줄로 표 대신 줄글 형태로 정리하세요.
+- 휴식일, 체중 측정일 등은 당신이 합리적으로 배치하세요.
+- 너무 길면 핵심만. 마크다운 표 기호(|)는 쓰지 마세요.""",
+
+    'grocery': """[도구 실행: 장보기 리스트 생성기]
+편성한 식단을 바탕으로 1주차 장보기 리스트를 카테고리(단백질/채소/탄수화물/기타)별로 생성하세요.
+간단한 분량 안내를 덧붙여도 좋습니다.""",
+
+    'delivery': """[단계: 최종 계획 전달]
+지금까지 만든 칼로리 목표, 식단, 운동, 2주 일정, 장보기 리스트를 하나의 완성된 2주 계획으로 정리해 전달하세요.
+- 핵심 요약 + 일자별 계획 + 마지막에 짧은 안전/실천 안내로 마무리하세요.
+- 마크다운 서식 금지.""",
+
+    'override': """[사용자 항목 수정 요청 처리]
+사용자가 계획의 특정 항목(예: 특정 날짜 식단/운동) 변경을 요청했습니다.
+- 요청한 항목만 정확히 찾아 수정하고, 바뀐 부분을 명확히 보여주세요.
+- 나머지 계획은 그대로 유지된다는 점을 알리세요.
+- 수정 후 추가로 바꿀 부분이 있는지 물어보세요(통제 조건).""",
+
+    'interrupt': """[사용자 중단/개입 처리]
+사용자가 진행 중인 작업을 멈추고 끼어들었습니다.
+- 사용자의 말에 먼저 짧게 응답하세요.
+- 현재 어디까지 진행됐는지 알리고, 계속 진행할지 사용자에게 확인하세요.""",
+}
+
+
 class GPTService:
-    """Service for interacting with Azure OpenAI or OpenAI GPT API."""
-    
+    """Service for interacting with Azure OpenAI or OpenAI GPT API.
+
+    Exposes a diet/exercise planning agent geared toward the user-control study.
+    """
+
     def __init__(self, api_key: str = None, use_azure: bool = True):
         """Initialize GPT service with API key.
-        
+
         Args:
             api_key: OpenAI or Azure API key
             use_azure: Whether to use Azure OpenAI (default: True)
         """
         self.use_azure = use_azure
-        
+
         if use_azure:
             # Azure OpenAI configuration
             self.api_key = api_key or os.getenv('AZURE_OPENAI_API_KEY')
             self.endpoint = os.getenv('AZURE_OPENAI_ENDPOINT')
             self.deployment = os.getenv('AZURE_OPENAI_DEPLOYMENT_NAME')
             self.api_version = os.getenv('AZURE_OPENAI_API_VERSION', '2024-02-15-preview')
-            
+
             if not all([self.api_key, self.endpoint, self.deployment]):
                 raise ValueError("Azure OpenAI configuration incomplete. Check AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_KEY, and AZURE_OPENAI_DEPLOYMENT_NAME")
-            
+
             try:
                 self.client = AzureOpenAI(
                     api_key=self.api_key,
@@ -42,25 +140,15 @@ class GPTService:
             if not self.api_key:
                 raise ValueError("OpenAI API key not provided")
             self.client = OpenAI(api_key=self.api_key)
-            self.model = "gpt-3.5-turbo"
-    
+            self.model = "gpt-4o-mini"
+
     def generate_response(
         self,
         messages: List[Dict[str, str]],
         temperature: float = 0.7,
-        max_tokens: int = 500
+        max_tokens: int = 900
     ) -> str:
-        """
-        Generate a response from GPT.
-        
-        Args:
-            messages: List of message dicts with 'role' and 'content' keys
-            temperature: Sampling temperature (0-2)
-            max_tokens: Maximum tokens in response
-            
-        Returns:
-            Generated response text
-        """
+        """Generate a raw response from GPT given chat messages."""
         try:
             response = self.client.chat.completions.create(
                 model=self.model,
@@ -71,163 +159,50 @@ class GPTService:
             return response.choices[0].message.content
         except Exception as e:
             raise Exception(f"Error generating GPT response: {str(e)}")
-    
-    def generate_conversational_response(
+
+    def generate_agent_response(
         self,
-        stage: str,
+        condition: str,
+        phase: str,
         user_message: str,
         conversation_history: List[Dict[str, str]],
-        previous_request: Optional[str] = None
+        autonomy_level: str = 'low',
+        override_instruction: Optional[str] = None
     ) -> str:
         """
-        Generate a natural conversational response that implicitly guides through workflow stages.
-        
+        Generate a planning-agent response for the given phase and condition.
+
         Args:
-            stage: Current workflow stage ('source_planning', 'structure_proposal', 'final_answer')
-            user_message: Latest user message
-            conversation_history: Full conversation history
-            previous_request: Previous user request (for interruption handling)
-            
+            condition: 'control' (user-control group) or 'auto' (autonomous group)
+            phase: one of PHASE_INSTRUCTIONS keys
+            user_message: latest user message
+            conversation_history: full prior conversation
+            autonomy_level: 'low' or 'high' (controls whether the agent pauses)
+            override_instruction: specific item-edit request (for the 'override' phase)
+
         Returns:
-            Contextual conversational response
+            Agent response text (plain text, no markdown)
         """
-        stage_instructions = {
-            'source_planning': """당신은 친절한 연구 조수입니다.
+        condition = condition if condition in CONDITION_MODIFIERS else 'control'
+        phase_instruction = PHASE_INSTRUCTIONS.get(phase, PHASE_INSTRUCTIONS['intake'])
 
-!!!절대 금지: 지금 단계에서 실제 답변 내용을 절대 제공하지 마세요!!!
-!!!이 단계의 유일한 목적: 어떤 자료를 참고할지 사용자에게 선택받는 것입니다!!!
+        system_prompt = AGENT_PERSONA + "\n\n" + CONDITION_MODIFIERS[condition] + "\n\n" + phase_instruction
 
-사용자의 질문을 받으면 다음을 수행하세요:
-1. 질문을 짧게 재확인
-2. 어떤 자료를 참고할지 물어보기 - 각 옵션에 설명을 추가하세요
-   예시:
-   "연구 결과나 전문가 의견, 일반적인 건강 정보 등을 확인할 수 있습니다. 어떤 자료를 선호하시나요?
-   
-   1. 학술 논문: 관련 연구 결과 및 실험 데이터
-   2. 정부/공신력 기관: 보건복지부, 의학 협회 등의 공식 발표
-   3. 뉴스: 전문가 의견이 포함된 보도 자료
-   4. 블로그 및 소셜 미디어: 일반적인 경험담과 논의들
-   
-   원하시는 번호를 선택하시거나, 여러 개를 조합해서 말씀해주세요."
+        # The autonomy dial only changes pacing for in-pipeline phases.
+        if phase in ('calc', 'meal', 'workout', 'schedule', 'grocery'):
+            system_prompt += AUTONOMY_MODIFIERS.get(autonomy_level, AUTONOMY_MODIFIERS['low'])
 
-중요:
-- 결과를 바로 제공하지 말고, 먼저 자료 선택을 받으세요.
-- 각 옵션에 구체적인 설명을 붙여서 사용자가 이해하기 쉽게 하세요.
-- 목록은 숫자 번호로만 작성하고, 불릿(-, •, *)은 사용하지 마세요.
-- 볼드체(**, __), 이탤릭체(*, _) 등 마크다운 서식 절대 사용 금지
-- 여러 개 선택 가능하다는 것을 명시하세요.""",
-            
-                'structure_proposal': """사용자가 참고 자료를 선택했습니다.
+        if override_instruction:
+            system_prompt += f"\n\n사용자 수정 요청: {override_instruction}"
 
-!!!절대 금지: 지금 단계에서 실제 최종 답변을 완성해서 제공하지 마세요!!!
-!!!이 단계의 목적: 구조안을 충분히 구체적으로 제시하고 승인을 받는 것입니다!!!
-
-해야 할 것:
-1. 사용자가 선택한 자료 유형을 한 줄로 확인
-2. 4-6개의 번호 목차를 제시하고, 각 항목 아래에 다음 2가지를 간단히 붙이세요.
-    - 이 항목에서 다룰 핵심 포인트(1~2문장)
-    - 포함할 근거/자료 관점(1문장)
-
-출력 예시 형식:
-"다음과 같은 구조로 정리하겠습니다.
-
-1. [항목 제목]
-- 핵심 포인트: ...
-- 근거/자료 관점: ...
-
-2. [항목 제목]
-- 핵심 포인트: ...
-- 근거/자료 관점: ...
-
-이 구조로 진행해도 될까요? 수정하고 싶은 항목이 있으면 말씀해주세요."
-
-멈추는 지점: 구조안 제시 후 반드시 멈추고 사용자의 응답을 기다리세요.
-
-규칙:
-- 최종 결론/권고안을 확정적으로 쓰지 말 것
-- 항목당 설명은 짧고 구체적으로(2~3줄 이내)
-- 목록의 상위 항목은 숫자 번호로 작성
-- 하위 정보는 리스팅 형식(-)으로 작성
-- 볼드체(**, __), 이탤릭체(*, _) 등 마크다운 서식 절대 사용 금지""",
-
-            'structure_refinement': """사용자가 구조 변경을 원했습니다.
-
-1. 사용자가 요청한 변경사항 이해 및 확인
-2. 이전 전체 구조를 기반으로 사용자 요청을 반영한 완전한 전체 구조를 다시 제시
-   - 기존 항목 중 유지할 것은 그대로 유지
-   - 사용자가 요청한 수정/추가/삭제/순서 변경 반영
-   - 항목 순서도 사용자 요청에 맞게 조정
-
-중요 규칙(포함/기반 표현 처리):
-- 사용자가 "이 내용을 포함해서", "이런 내용을 기반으로" 같은 표현을 쓰면,
-  해당 내용은 독립 대항목으로 분리하지 말고 관련 상위 항목의 하위 항목으로 배치
-- 하위 항목 표기는 숫자 번호(예: 3.1, 3.2)를 쓰지 말고 리스팅 형식으로 작성
-  예: "- 식단 제안", "- 운동 계획", "- 수면 습관"
-- 상위 항목은 기존처럼 숫자 번호 유지, 하위 항목만 리스팅 형식 사용
-
-구조 제시 시 구체성 강화:
-- 각 항목 제목 아래에 핵심 포인트 1~2문장을 함께 제시
-- 필요 시 하위 항목으로 포함 범위를 명시
-- 사용자 요청을 충분히 반영하는 주요 항목들로 구성
-- 아직 최종 결론/최종 권고는 확정하지 말 것
-
-3. 승인 확인: "예/y를 입력하시면 답변 드리겠습니다."
-
-중요:
-- 여전히 결과는 제공하지 말고 전체 구조 확인만 받으세요.
-- 일부만 보여주지 말고, 처음부터 끝까지 전체 구조를 모두 나열하세요.
-- 사용자 요청을 정확히 반영하되, 전체 맥락을 유지하세요.
-- 목록의 상위 항목은 숫자 번호로 작성
-- 하위 항목은 숫자 번호 대신 리스팅 형식(-)으로 작성
-- 각 항목은 명확한 제목 + 짧은 핵심 포인트를 함께 제시
-- 볼드체(**, __), 이탤릭체(*, _) 등 마크다운 서식 절대 사용 금지""",
-
-            'final_confirmation': """사용자가 최종 구조를 승인했습니다.
-
-이제 다시 한번 확인을 받으세요:
-1. 제안한 구조를 간단히 요약
-2. "이 구조로 답변을 드려도 될까요?" 형태로 최종 확인 요청
-
-사용자가 "예"를 말하면 완전한 답변을 제공하세요.
-
-규칙:
-- 여전히 결과는 제공하지 말고 구조 확인만 하세요.
-- 마크다운 서식 절대 사용 금지""",
-
-            'final_answer': """사용자가 최종 답변 제공에 동의했습니다. 이제 완전한 답변을 제공하세요.
-
-제안한 구조에 맞춰 자연스럽게 작성하세요.
-- 일반 텍스트 형식 유지 (마크다운 서식 사용 금지)
-- 마지막에 사용자 피드백 요청으로 마무리"""
-        }
-        
-        if stage == 'interruption':
-            system_prompt = (
-                "사용자의 즉흥 질문에 먼저 간단히 답하고, "
-                "이전 요청을 계속 진행할지 예/아니오로 확인하세요. "
-                "마크다운 서식 절대 사용 금지 - 일반 텍스트로만 작성하세요."
-            )
-            if previous_request:
-                system_prompt += f"\n이전 요청: {previous_request}"
-        else:
-            system_prompt = stage_instructions.get(stage, stage_instructions['source_planning'])
-        
-        # Build conversation context
         messages = [{"role": "system", "content": system_prompt}]
-        
-        # Add recent conversation history (last 5 messages for context)
-        recent_history = conversation_history[-6:-1] if len(conversation_history) > 1 else []
-        for msg in recent_history:
-            messages.append({
-                "role": msg['role'],
-                "content": msg['content']
-            })
-        
-        # Add current user message
-        messages.append({
-            "role": "user",
-            "content": user_message
-        })
-        
-        return self.generate_response(messages, temperature=0.7, max_tokens=800)
 
+        # Include recent history for continuity (last ~8 turns, excluding current).
+        recent_history = conversation_history[-9:-1] if len(conversation_history) > 1 else []
+        for msg in recent_history:
+            messages.append({"role": msg['role'], "content": msg['content']})
+
+        messages.append({"role": "user", "content": user_message})
+
+        max_tokens = 1200 if phase in ('schedule', 'delivery') else 800
+        return self.generate_response(messages, temperature=0.7, max_tokens=max_tokens)

@@ -152,7 +152,24 @@ def show_statistics():
     # Stage distribution
     cursor.execute('SELECT stage, COUNT(*) FROM workflow_state GROUP BY stage')
     stage_counts = cursor.fetchall()
-    
+
+    # Experimental condition distribution (Effect of User Control)
+    try:
+        cursor.execute('SELECT condition, COUNT(*) FROM conversations GROUP BY condition')
+        condition_counts = cursor.fetchall()
+    except Exception:
+        condition_counts = []
+
+    # User-control behavior: intervention type distribution
+    try:
+        cursor.execute(
+            'SELECT intervention_type, COUNT(*) FROM workflow_state '
+            'WHERE intervention_type IS NOT NULL GROUP BY intervention_type'
+        )
+        intervention_counts = cursor.fetchall()
+    except Exception:
+        intervention_counts = []
+
     conn.close()
     
     print("\n" + "="*100)
@@ -169,7 +186,17 @@ def show_statistics():
         print("\n워크플로우 단계별 분포:")
         for stage, count in stage_counts:
             print(f"  - {stage}: {count}")
-    
+
+    if condition_counts:
+        print("\n실험 조건별 대화 수:")
+        for condition, count in condition_counts:
+            print(f"  - {condition or 'N/A'}: {count}")
+
+    if intervention_counts:
+        print("\n사용자 통제 행동(intervention) 분포:")
+        for itype, count in intervention_counts:
+            print(f"  - {itype}: {count}")
+
     print("\n")
 
 
