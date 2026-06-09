@@ -22,6 +22,47 @@ class WorkflowManager:
     # Ordered pipeline of agentic tool steps.
     PIPELINE = ['calc', 'meal', 'workout', 'schedule', 'grocery', 'delivery']
 
+    # Sequential intake: one question at a time, each with clickable options
+    # plus a free-text "기타" choice. Deterministic (no LLM) so both conditions
+    # see identical onboarding.
+    GOAL = '2주 뒤 2kg 감량'
+    INTAKE_GREETING = (
+        f'{GOAL} 목표로 식단·운동·일상 계획을 짜드리겠습니다.\n'
+        '맞춤 설계를 위해 몇 가지만 순서대로 여쭤볼게요.'
+    )
+    INTAKE_STEPS = [
+        {
+            'stage': 'intake_food',
+            'question': '먼저 식단부터요. 좋아하거나 피하고 싶은 음식, 알레르기가 있나요?',
+            'options': [
+                {'id': 'food_none', 'label': '특별히 가리는 것 없어요', 'value': '특별히 가리는 음식은 없어요'},
+                {'id': 'food_meat', 'label': '육류를 선호해요', 'value': '육류를 선호해요'},
+                {'id': 'food_fish', 'label': '생선·해산물을 선호해요', 'value': '생선과 해산물을 선호해요'},
+                {'id': 'food_veg', 'label': '채식 위주로 할래요', 'value': '채식 위주로 하고 싶어요'},
+                {'id': 'custom', 'label': '기타 (직접 입력)', 'value': ''},
+            ],
+        },
+        {
+            'stage': 'intake_exercise',
+            'question': '운동은 언제 가능하세요? 가능한 요일과 하루 시간대를 알려주세요.',
+            'options': [
+                {'id': 'ex_daily', 'label': '매일 가능해요', 'value': '매일 운동할 수 있어요'},
+                {'id': 'ex_weekday', 'label': '평일 위주', 'value': '평일 저녁에 주로 가능해요'},
+                {'id': 'ex_weekend', 'label': '주말 위주', 'value': '주말에 주로 가능해요'},
+                {'id': 'ex_short', 'label': '하루 30분 정도', 'value': '하루 30분 정도 낼 수 있어요'},
+                {'id': 'custom', 'label': '기타 (직접 입력)', 'value': ''},
+            ],
+        },
+        {
+            'stage': 'intake_body',
+            'question': '마지막으로, 더 정확한 계획을 위해 키와 몸무게를 알려주실 수 있나요? (선택)',
+            'options': [
+                {'id': 'body_skip', 'label': '생략할게요', 'value': '키와 몸무게는 생략할게요'},
+                {'id': 'custom', 'label': '직접 입력', 'value': ''},
+            ],
+        },
+    ]
+
     TOOL_META = {
         'calc': {'tool': 'calorie_calculator', 'label': '칼로리 계산기'},
         'meal': {'tool': 'meal_database', 'label': '식단 데이터베이스'},
@@ -32,7 +73,9 @@ class WorkflowManager:
     }
 
     STAGE_DESCRIPTIONS = {
-        'intake': '목표 확인 및 제약 수집',
+        'intake_food': '식단 선호 확인',
+        'intake_exercise': '운동 가능 시간 확인',
+        'intake_body': '신체 정보 확인 (선택)',
         'calc': '칼로리/목표 산출 중',
         'meal': '식단 구성 중',
         'workout': '운동 루틴 설계 중',
@@ -65,12 +108,16 @@ class WorkflowManager:
         latest = self.db_manager.get_latest_workflow_state(conversation_id)
         stage = latest.get('stage') if latest else None
 
-        # 1) First message = the diet goal -> run intake (collect constraints).
+        # 1) First message = the diet goal -> ask the first intake question.
         if stage is None:
-            return self._run_intake(conversation_id, condition, user_message)
+            return self._ask_intake(conversation_id, 0, condition, autonomy, user_message, greet=True)
 
-        # 2) Constraints answered -> launch the agentic pipeline.
-        if stage == 'intake':
+        # 2) Sequential intake: answer the current question, then ask the next
+        #    one, or launch the agentic pipeline once all are answered.
+        intake_idx = self._intake_stage_index(stage)
+        if intake_idx is not None:
+            if intake_idx + 1 < len(self.INTAKE_STEPS):
+                return self._ask_intake(conversation_id, intake_idx + 1, condition, autonomy, user_message)
             if condition == 'auto' or autonomy == 'high':
                 return self._run_pipeline(conversation_id, condition, 'calc', user_message, autonomy)
             return self._run_single_phase(conversation_id, condition, 'calc', user_message, autonomy)
@@ -93,18 +140,28 @@ class WorkflowManager:
     # ------------------------------------------------------------------ #
     # Phase runners
     # ------------------------------------------------------------------ #
-    def _run_intake(self, conversation_id: int, condition: str, user_message: str) -> Dict[str, Any]:
-        history = self.db_manager.get_conversation_messages(conversation_id)
-        response = self.gpt_service.generate_agent_response(
-            condition=condition, phase='intake', user_message=user_message,
-            conversation_history=history, autonomy_level='low'
-        )
+    def _intake_stage_index(self, stage: str) -> Optional[int]:
+        for i, step in enumerate(self.INTAKE_STEPS):
+            if step['stage'] == stage:
+                return i
+        return None
+
+    def _ask_intake(
+        self, conversation_id: int, idx: int, condition: str, autonomy: str,
+        user_message: str, greet: bool = False
+    ) -> Dict[str, Any]:
+        """Ask one intake question with clickable options (deterministic)."""
+        step = self.INTAKE_STEPS[idx]
+        response = (self.INTAKE_GREETING + '\n\n' + step['question']) if greet else step['question']
         self.db_manager.add_message(conversation_id, 'assistant', response)
         self.db_manager.add_workflow_state(
-            conversation_id=conversation_id, stage='intake',
-            user_input=user_message, gpt_response=response, autonomy_level='low'
+            conversation_id=conversation_id, stage=step['stage'],
+            user_input=user_message, gpt_response=response, autonomy_level=autonomy
         )
-        return self._result(response, 'intake', condition, 'low', agent_actions=[], controls=False)
+        return self._result(
+            response, step['stage'], condition, autonomy,
+            agent_actions=[], controls=False, choices=step['options']
+        )
 
     def _run_single_phase(
         self, conversation_id: int, condition: str, phase: str,
@@ -340,7 +397,8 @@ class WorkflowManager:
     def _result(
         self, response: str, stage: str, condition: str, autonomy: str,
         agent_actions: List[Dict[str, str]], controls: bool,
-        resumable: bool = False, post_plan: bool = False
+        resumable: bool = False, post_plan: bool = False,
+        choices: Optional[List[Dict[str, str]]] = None
     ) -> Dict[str, Any]:
         return {
             'response': response,
@@ -352,5 +410,6 @@ class WorkflowManager:
             'controls_enabled': controls,
             'resumable': resumable,
             'post_plan': post_plan,
+            'choices': choices,
             'awaiting_input': stage not in ('closed',),
         }

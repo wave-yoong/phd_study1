@@ -73,7 +73,15 @@ def _assign_condition(requested: str) -> str:
 
 
 def _build_choices(result: dict) -> list:
-    """Build clickable control affordances. Only the control group gets levers."""
+    """Resolve clickable choices for a step.
+
+    Intake questions supply their own option list (shown to both conditions);
+    otherwise only the control group gets steering levers.
+    """
+    # Intake (and any handler that pre-built choices) takes precedence.
+    if result.get('choices') is not None:
+        return result['choices']
+
     if result.get('condition') != CONDITION_CONTROL:
         return []
 

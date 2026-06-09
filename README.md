@@ -5,7 +5,7 @@ This repository contains a Flask web app for studying the **effect of user contr
 
 ## Scenario (shown to participants)
 
-> 당신은 2주 뒤 5kg 감량을 목표로 다이어트를 하고 있습니다. 당신의 AI 에이전트는 목표 체중을 위해 운동과 식단 계획을 대신 짜줍니다. AI 에이전트와 대화하면서 2주의 식단과 운동 및 일상을 계획해 주세요.
+> 당신은 2주 뒤 2kg 감량을 목표로 다이어트를 하고 있습니다. 당신의 AI 에이전트는 목표 체중을 위해 운동과 식단 계획을 대신 짜줍니다. AI 에이전트와 대화하면서 2주의 식단과 운동 및 일상을 계획해 주세요.
 
 ## Experimental conditions (between-subjects)
 

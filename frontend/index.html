@@ -55,6 +55,44 @@
             align-items: center;
             gap: 12px;
         }
+
+        .brand-logo {
+            display: inline-flex;
+            align-items: center;
+            gap: 9px;
+        }
+
+        .brand-logo svg {
+            display: block;
+            border-radius: 9px;
+        }
+
+        .brand-name {
+            font-size: 16px;
+            font-weight: 700;
+            color: #202123;
+            letter-spacing: -0.2px;
+        }
+
+        .scenario-start {
+            margin-top: 14px;
+        }
+
+        .start-btn {
+            background: #10a37f;
+            color: #ffffff;
+            border: 1px solid #0d8c6d;
+            border-radius: 8px;
+            padding: 10px 16px;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .start-btn:hover {
+            background: #0d8c6d;
+            border-color: #0d8c6d;
+            color: #ffffff;
+        }
         
         
         .chat-area {
@@ -404,7 +442,20 @@
     <div class="container">
         <div class="header">
             <div class="header-left">
-                <h1>AI 다이어트 플래너 에이전트</h1>
+                <span class="brand-logo" aria-label="AI Diet Planner logo">
+                    <svg width="34" height="34" viewBox="0 0 32 32" role="img" aria-hidden="true">
+                        <defs>
+                            <linearGradient id="dpg" x1="0" y1="0" x2="1" y2="1">
+                                <stop offset="0" stop-color="#13b88c"/>
+                                <stop offset="1" stop-color="#0c7a5e"/>
+                            </linearGradient>
+                        </defs>
+                        <rect width="32" height="32" rx="9" fill="url(#dpg)"/>
+                        <path d="M16 6.5c4.6 1.2 7 4.7 7 9 0 4.6-3 8-7 10-4-2-7-5.4-7-10 0-4.3 2.4-7.8 7-9z" fill="#ffffff" opacity="0.95"/>
+                        <path d="M11 16.4h2.1l1.3-2.7 1.9 5 1.3-2.5H21" fill="none" stroke="#0c7a5e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    <span class="brand-name">AI Diet Planner</span>
+                </span>
             </div>
             <button class="btn-reset" onclick="resetChat()">New Chat</button>
         </div>
@@ -414,10 +465,12 @@
                 <div class="message-content">
                     <div class="scenario-box">
                         <div class="scenario-title">시나리오 (실험 참가자 전용)</div>
-                        당신은 2주 뒤 5kg 감량을 목표로 다이어트를 하고 있습니다.
+                        당신은 2주 뒤 2kg 감량을 목표로 다이어트를 하고 있습니다.
                         당신의 AI 에이전트는 목표 체중을 위해 운동과 식단 계획을 대신 짜줍니다.
-                        AI 에이전트와 대화하면서 2주의 식단과 운동 및 일상을 계획해 주세요.<br><br>
-                        아래 입력창에 목표나 다이어트 계획 요청을 입력하며 시작하세요.
+                        AI 에이전트와 대화하면서 2주의 식단과 운동 및 일상을 계획해 주세요.
+                        <div class="scenario-start">
+                            <button type="button" class="start-btn" onclick="startPlanning()">AI 에이전트와 계획 시작하기</button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -428,7 +481,7 @@
             <div class="loading" id="loading">Thinking...</div>
             
             <div class="input-group" id="queryInput">
-                <input type="text" id="userInput" placeholder="예: 2주 뒤 5kg 감량 목표예요. 식단과 운동 계획 짜줘" />
+                <input type="text" id="userInput" placeholder="메시지를 입력하세요..." />
                 <button onclick="sendMessage()" class="send-btn" title="전송" id="sendBtn">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <line x1="22" y1="2" x2="11" y2="13"></line>
@@ -694,6 +747,12 @@
             }
         }
         
+        function startPlanning() {
+            const input = document.getElementById('userInput');
+            input.value = '2주 뒤 2kg 감량이 목표예요. 식단과 운동 계획을 짜줘';
+            sendMessage();
+        }
+
         async function resetChat() {
             try {
                 await fetch('/api/reset', { method: 'POST' });

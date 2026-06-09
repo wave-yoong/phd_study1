@@ -24,11 +24,14 @@ Assign condition via URL (`/?group=control`, `/?group=auto`) or let it randomize
 ## 2. What you still need to provide
 
 ### A. Weight-loss target & safety framing  ⚠️ important
-The scenario says "2주 5kg". That is medically aggressive and can become a
-**confound** (distrust of advice unrelated to control). Decide:
-- Keep "5kg" as the *participant's stated goal* but have the agent plan a healthy
-  range (current default), **or** soften the scenario number.
+The scenario target is now "2주 2kg" (revised down from 5kg, which was medically
+aggressive and risked becoming a **confound** — distrust of advice unrelated to
+control). Still confirm:
+- Whether 2kg/2주 fits your participant pool, **or** adjust further.
 - Final safety/disclaimer wording for IRB.
+
+The target string lives in one place: `services/workflow_manager.py` → `GOAL`
+(used in the intake greeting). The scenario box copy is in `frontend/index.html`.
 
 Where to edit:
 - Scenario text: `frontend/index.html` (the `.scenario-box` block).
