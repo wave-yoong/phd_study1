@@ -197,13 +197,25 @@ class GPTService:
             Agent response text (plain text, no markdown)
         """
         condition = condition if condition in CONDITION_MODIFIERS else 'control'
-        phase_instruction = PHASE_INSTRUCTIONS.get(phase, PHASE_INSTRUCTIONS['intake'])
+        is_question = bool(override_instruction and override_instruction.startswith('__QUESTION__'))
 
-        system_prompt = AGENT_PERSONA + "\n\n" + CONDITION_MODIFIERS[condition] + "\n\n" + phase_instruction
-
-        # The autonomy dial only changes pacing for in-pipeline phases.
-        if phase in ('calc', 'meal', 'workout', 'schedule', 'grocery'):
-            system_prompt += AUTONOMY_MODIFIERS.get(autonomy_level, AUTONOMY_MODIFIERS['low'])
+        if is_question:
+            # The user asked about the current step; explain rather than rebuild it.
+            question = override_instruction.replace('__QUESTION__', '', 1).strip()
+            system_prompt = (
+                AGENT_PERSONA + "\n\n" + CONDITION_MODIFIERS[condition] + "\n\n"
+                + "[사용자 질문에 답변]\n"
+                + f"사용자가 방금 단계에 대해 질문했습니다: {question}\n"
+                + "그 질문에 대해 충분히 구체적으로, 그렇게 설계한 이유와 근거(수치·원리)를 들어 설명하세요. "
+                + "'균형 유지 기준' 같은 한 줄짜리 답이 아니라 2~4문장으로 친절히 설명하세요. "
+                + "설명 후에는 단계 내용을 다시 만들지 말고, 마지막에 '이대로 진행할까요, 아니면 바꿔드릴까요?'로 마무리하세요."
+            )
+        else:
+            phase_instruction = PHASE_INSTRUCTIONS.get(phase, PHASE_INSTRUCTIONS['intake'])
+            system_prompt = AGENT_PERSONA + "\n\n" + CONDITION_MODIFIERS[condition] + "\n\n" + phase_instruction
+            # The autonomy dial only changes pacing for in-pipeline phases.
+            if phase in ('calc', 'meal', 'workout', 'sleep', 'schedule', 'grocery'):
+                system_prompt += AUTONOMY_MODIFIERS.get(autonomy_level, AUTONOMY_MODIFIERS['low'])
 
         if profile:
             system_prompt += (
@@ -212,7 +224,7 @@ class GPTService:
                 "체중 감량이 언급되지 않았다면 감량 중심으로 몰아가지 마세요."
             )
 
-        if override_instruction:
+        if override_instruction and not is_question:
             system_prompt += f"\n\n사용자 수정 요청: {override_instruction}"
 
         messages = [{"role": "system", "content": system_prompt}]

@@ -382,7 +382,7 @@ class WorkflowManager:
         )
         actions = [self._action_card(phase)]
         controls = (condition == 'control') and not is_last
-        steps = [self._step_card(phase, response)]
+        steps = [self._step_card(phase, response, visual=self._step_visual(phase))]
         approval_prompt = meta['approve'] if (condition == 'control' and not is_last) else None
         # The step card carries the content; keep the message body empty to avoid
         # duplicating it. For the final plan, add a short confirmation note.
@@ -423,7 +423,7 @@ class WorkflowManager:
             )
             working_history.append({'role': 'assistant', 'content': text})
             actions.append(self._action_card(phase))
-            steps.append(self._step_card(phase, text))
+            steps.append(self._step_card(phase, text, visual=self._step_visual(phase)))
             parts.append(f"[{meta['label']}]\n{text}")
 
         closing = ("계획을 모두 확정했습니다. 그대로 따라 주시면 됩니다."
@@ -455,6 +455,10 @@ class WorkflowManager:
         # Interrupt / stop the agent.
         if intent == 'interrupt':
             return self._pause(conversation_id, condition, stage, user_message)
+
+        # The user asked a question about this step -> explain, stay at the checkpoint.
+        if intent == 'question':
+            return self._answer_question(conversation_id, condition, stage, user_message)
 
         # Modify the current step.
         if intent == 'modify':
@@ -488,6 +492,29 @@ class WorkflowManager:
         self._resume_target[conversation_id] = stage
         return self._result(response, 'paused', condition, 'low',
                             agent_actions=[], controls=False, resumable=True)
+
+    def _answer_question(self, conversation_id: int, condition: str, stage: str,
+                         user_message: str) -> Dict[str, Any]:
+        """Answer a question about the current step substantively, then stay at the
+        checkpoint so the user can still approve / modify / stop."""
+        meta = self.TOOL_META[stage]
+        history = self.db_manager.get_conversation_messages(conversation_id)
+        response = self.gpt_service.generate_agent_response(
+            condition=condition, phase=stage, user_message=user_message,
+            conversation_history=history, autonomy_level='low',
+            override_instruction=f"__QUESTION__[{meta['label']}] {user_message}",
+            profile=self._user_profile(conversation_id)
+        )
+        self.db_manager.add_message(conversation_id, 'assistant', response)
+        self.db_manager.add_workflow_state(
+            conversation_id=conversation_id, stage=stage,
+            user_input=user_message, gpt_response=response,
+            tool_name=meta['tool'], intervention_type='question', autonomy_level='low'
+        )
+        approval = meta['approve'] if condition == 'control' else None
+        return self._result(response, stage, condition, 'low',
+                            agent_actions=[], controls=(condition == 'control'),
+                            approval_prompt=approval)
 
     def _handle_paused(
         self, conversation_id: int, condition: str, autonomy: str,
@@ -584,7 +611,7 @@ class WorkflowManager:
             'status': '실행 완료',
         }
 
-    def _step_card(self, phase: str, content: str) -> Dict[str, str]:
+    def _step_card(self, phase: str, content: str, visual: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """A pipeline step the frontend reveals with a working->done animation."""
         meta = self.TOOL_META[phase]
         return {
@@ -592,7 +619,35 @@ class WorkflowManager:
             'label': meta['label'],
             'icon': meta.get('icon', 'plan'),
             'content': content,
+            'visual': visual,
         }
+
+    # Canonical baseline values, shared by the visuals and the demo content.
+    MACROS = {'kcal': 1900, 'carb': 45, 'protein': 30, 'fat': 25}
+
+    def _step_visual(self, phase: str) -> Optional[Dict[str, Any]]:
+        """Structured data the frontend renders as an infographic (macro bar / calendar)."""
+        if phase == 'calc':
+            m = self.MACROS
+            return {
+                'type': 'macros', 'kcal': m['kcal'],
+                'items': [
+                    {'label': '탄수화물', 'pct': m['carb']},
+                    {'label': '단백질', 'pct': m['protein']},
+                    {'label': '지방', 'pct': m['fat']},
+                ],
+            }
+        if phase == 'schedule':
+            days = []
+            for d in range(1, 15):
+                if d % 7 in (3, 0):
+                    kind = 'rest'
+                else:
+                    kind = 'strength' if d % 2 else 'cardio'
+                days.append({'day': d, 'kind': kind,
+                             'tag': '컨디션 점검' if d in (1, 8, 14) else ''})
+            return {'type': 'calendar', 'days': days}
+        return None
 
     def _classify_intent(self, user_message: str) -> str:
         """Classify a control-group user action at a checkpoint."""
@@ -605,6 +660,15 @@ class WorkflowManager:
         stop_patterns = ['중단', '멈춰', '그만', '잠깐', '스톱', 'stop', '정지', '대기']
         if any(p in msg for p in stop_patterns):
             return 'interrupt'
+
+        # A question about the step (reasoning/clarification) -> answer it, don't modify.
+        question_patterns = ['왜', '이유', '어째서', '무슨', '무엇', '뭐', '어떻게', '어떤', '궁금',
+                             '설명', '근거', '왜냐', '뜻', '의미', 'why', '인가요', '인가', '나요?', '맞나']
+        if user_message.strip().endswith('?') or any(p in msg for p in question_patterns):
+            # but an explicit change request that also contains '?' should still modify
+            change_words = ['바꿔', '수정', '변경', '교체', '빼줘', '추가해']
+            if not any(c in msg for c in change_words):
+                return 'question'
 
         modify_patterns = ['바꿔', '바꿔줘', '수정', '변경', '대신', '말고', '빼', '제외', '추가', '넣어',
                             '다시', '아니', '싫', '교체', '별로', 'no', '일차', '요일']

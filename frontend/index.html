@@ -537,6 +537,42 @@
             border-top: 1px solid #eef0f6;
         }
 
+        /* ---- Step infographics (macro bar / calendar) ---- */
+        .viz { margin: 2px 0 12px; }
+        .viz-kcal { font-weight: 700; font-size: 14px; color: #0d8c6d; margin-bottom: 8px; }
+        .macro-bar {
+            display: flex; height: 16px; border-radius: 999px; overflow: hidden;
+            background: #eef0f6;
+        }
+        .macro-seg { height: 100%; }
+        .macro-legend { display: flex; gap: 14px; margin-top: 8px; font-size: 12px; color: #4b5563; }
+        .macro-leg { display: inline-flex; align-items: center; gap: 5px; }
+        .macro-leg .dot, .cal-legend .dot {
+            width: 9px; height: 9px; border-radius: 999px; display: inline-block;
+        }
+
+        .cal-grid {
+            display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px;
+        }
+        .cal-cell {
+            border-radius: 8px; padding: 7px 4px; text-align: center;
+            background: #f3f4f6; position: relative; min-height: 46px;
+        }
+        .cal-cell.d-strength { background: #e7f7f0; }
+        .cal-cell.d-cardio { background: #eef2ff; }
+        .cal-cell.d-rest { background: #f3f4f6; color: #9ca3af; }
+        .cal-day { display: block; font-weight: 700; font-size: 13px; color: #374151; }
+        .cal-cell.d-rest .cal-day { color: #9ca3af; }
+        .cal-kind { display: block; font-size: 11px; margin-top: 2px; color: #4b5563; }
+        .cal-tag {
+            display: block; font-size: 10px; margin-top: 2px; color: #b45309; font-weight: 600;
+        }
+        .cal-legend { display: flex; gap: 14px; margin-top: 10px; font-size: 12px; color: #4b5563; }
+        .cal-legend span { display: inline-flex; align-items: center; gap: 5px; }
+        .cal-legend .dot.d-strength { background: #34d399; }
+        .cal-legend .dot.d-cardio { background: #818cf8; }
+        .cal-legend .dot.d-rest { background: #d1d5db; }
+
         .approval-prompt {
             margin: 8px 0 2px;
             padding: 12px 14px;
@@ -761,8 +797,8 @@
     
     <script>
         // Bump this whenever the UI changes so we can confirm the running build.
-        const BUILD = 'wellness-build-8 · goal-branching intake';
-        const EXPECTED_SERVER_BUILD = 'wellness-build-8';
+        const BUILD = 'wellness-build-9 · answers+visuals';
+        const EXPECTED_SERVER_BUILD = 'wellness-build-9';
         console.log('[study] UI ' + BUILD);
         window.addEventListener('DOMContentLoaded', () => {
             const t = document.getElementById('buildTag');
@@ -834,16 +870,56 @@
         const CHECK_SVG = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
 
         // Reveal one tool step: spinner ("실행 중") -> check ("완료") -> body fades in.
+        // Render a step's structured visual (macro bar / 2-week calendar) as an infographic.
+        function renderStepVisual(visual) {
+            if (!visual) return '';
+            if (visual.type === 'macros') {
+                const colors = ['#10a37f', '#6366f1', '#f59e0b'];
+                const segs = (visual.items || []).map((it, i) =>
+                    `<div class="macro-seg" style="width:${it.pct}%;background:${colors[i % 3]}"></div>`).join('');
+                const legend = (visual.items || []).map((it, i) =>
+                    `<span class="macro-leg"><span class="dot" style="background:${colors[i % 3]}"></span>${escapeHtml(it.label)} ${it.pct}%</span>`).join('');
+                return `
+                    <div class="viz">
+                        <div class="viz-kcal">하루 약 ${visual.kcal.toLocaleString()} kcal</div>
+                        <div class="macro-bar">${segs}</div>
+                        <div class="macro-legend">${legend}</div>
+                    </div>`;
+            }
+            if (visual.type === 'calendar') {
+                const kindClass = {rest: 'd-rest', strength: 'd-strength', cardio: 'd-cardio'};
+                const kindLabel = {rest: '휴식', strength: '근력', cardio: '유산소'};
+                const cells = (visual.days || []).map(d => `
+                    <div class="cal-cell ${kindClass[d.kind] || ''}">
+                        <span class="cal-day">${d.day}</span>
+                        <span class="cal-kind">${kindLabel[d.kind] || ''}</span>
+                        ${d.tag ? `<span class="cal-tag">점검</span>` : ''}
+                    </div>`).join('');
+                return `
+                    <div class="viz">
+                        <div class="cal-grid">${cells}</div>
+                        <div class="cal-legend">
+                            <span><span class="dot d-strength"></span>근력</span>
+                            <span><span class="dot d-cardio"></span>유산소</span>
+                            <span><span class="dot d-rest"></span>휴식</span>
+                        </div>
+                    </div>`;
+            }
+            return '';
+        }
+
         async function animateStep(container, step) {
             const card = document.createElement('div');
             card.className = 'agent-step';
+            const bodyInner = renderStepVisual(step.visual) +
+                convertLinksToClickable(escapeHtml(step.content || '').replace(/\n/g, '<br>'));
             card.innerHTML = `
                 <div class="agent-step-head">
                     <span class="agent-step-icon">${iconSvg(step.icon)}</span>
                     <span class="agent-step-label">${escapeHtml(step.label || '도구')}</span>
                     <span class="agent-step-status"><span class="spinner"></span>실행 중...</span>
                 </div>
-                <div class="agent-step-body">${convertLinksToClickable(escapeHtml(step.content || '').replace(/\n/g, '<br>'))}</div>
+                <div class="agent-step-body">${bodyInner}</div>
             `;
             container.appendChild(card);
             scrollToBottom();
@@ -981,11 +1057,13 @@
 
             const hasCustomInput = hasCustomInputChoice;
             if (hasCustomInput) {
+                const customChoice = choices.find(c => !((c.value || '').trim()));
+                const customLabel = (customChoice && customChoice.label) ? customChoice.label : '기타';
                 const hint = document.createElement('div');
                 hint.className = 'choice-input-hint';
                 hint.textContent = isMultiSelect
                     ? '번호 옵션은 여러 개 선택 후 선택 완료를 눌러주세요. 기타는 직접 입력할 수 있어요.'
-                    : '기타를 선택하면 직접 입력할 수 있어요.';
+                    : `'${customLabel}'을(를) 누르면 직접 입력할 수 있어요. 궁금한 점을 물어보셔도 돼요.`;
                 container.appendChild(hint);
             }
         }

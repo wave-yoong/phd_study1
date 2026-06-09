@@ -37,6 +37,10 @@ class MockGPTService:
         is_auto = (condition == 'auto') or (autonomy_level == 'high')
         goal, focus = self._detect_goal(profile, user_message)
 
+        # The user asked WHY about the current step -> explain with reasoning.
+        if override_instruction and override_instruction.startswith('__QUESTION__'):
+            return self._explain(phase)
+
         def finish(body, auto_tail, ctrl_tail):
             # In the control group a "modify" request arrives as override_instruction;
             # reflect it so the change is visibly applied (demo mode is otherwise fixed).
@@ -165,6 +169,39 @@ class MockGPTService:
             )
 
         return f"'{user_message}'에 대해 루틴 설계를 도와드리겠습니다."
+
+    @staticmethod
+    def _explain(phase):
+        """Substantive reasoning for a step when the user asks 'why' (demo)."""
+        reasons = {
+            'calc': (
+                "이 수치를 설명드릴게요. 하루 약 1,900kcal는 활동량 보통 성인의 건강 유지 권장 범위(대략 1,800~2,200kcal)에 해당해서 기준으로 잡았어요. "
+                "탄수화물45·단백질30·지방25 비율은 에너지와 근육 유지의 균형을 위한 일반적 권장치이고요. "
+                "급격히 줄이면 컨디션 저하·요요 위험이 있어 무리한 제한은 피했습니다."
+            ),
+            'meal': (
+                "식단을 이렇게 구성한 이유는, 가공식품을 줄이고 단백질·채소·통곡물을 고르게 넣어 혈당 변동과 공복감을 줄이기 위해서예요. "
+                "끼니를 거르지 않고 규칙적으로 먹는 것이 에너지 유지와 습관 형성에 더 효과적이라 하루 3끼+가벼운 간식으로 짰습니다."
+            ),
+            'workout': (
+                "주 5일 활동·2일 휴식으로 잡은 건, 회복 시간을 확보해야 부상 없이 꾸준히 이어갈 수 있기 때문이에요. "
+                "유산소와 근력을 번갈아 배치하면 체력과 근지구력을 함께 키우면서 특정 부위 피로를 줄일 수 있습니다."
+            ),
+            'sleep': (
+                "취침 23:30·기상 07:00은 약 7.5시간으로, 성인 권장 수면(7~9시간) 범위예요. "
+                "취침 전 스크린·카페인을 줄이라고 한 건 멜라토닌 분비와 입면을 방해하기 때문이고, 일정한 시간에 자고 일어나는 것이 수면의 질 개선에 가장 효과적입니다."
+            ),
+            'schedule': (
+                "일정은 운동일과 휴식일을 번갈아 배치하고, 1·8·14일차에 컨디션 점검을 넣어 2주 동안 무리 없이 흐름을 유지하도록 짰어요. "
+                "주중·주말 부담을 고르게 나눠 지속 가능성을 높였습니다."
+            ),
+            'grocery': (
+                "장보기 목록은 위에서 짠 식단에 실제로 필요한 재료만 1주 분량으로 추린 거예요. "
+                "단백질·채소·통곡물을 중심으로 담아 균형 잡힌 식사를 쉽게 준비할 수 있게 했습니다."
+            ),
+        }
+        body = reasons.get(phase, "그렇게 설계한 이유를 설명드릴게요. 건강 유지에 적정한 일반 기준과 사용자 정보를 바탕으로 잡았습니다.")
+        return body + "\n\n이대로 진행할까요, 아니면 바꿔드릴까요?"
 
     @staticmethod
     def _detect_goal(profile, user_message):
