@@ -643,6 +643,57 @@
 
         .dt-submit:hover { background: #0d8c6d; color: #fff; }
         .dt-hint { padding: 0 12px 6px; font-size: 12px; color: #8e8ea0; }
+
+        /* ---- Height / weight widget ---- */
+        .body-widget {
+            margin-top: 10px;
+            border: 1px solid #e5e7eb;
+            border-radius: 14px;
+            padding: 14px;
+            background: #fff;
+        }
+
+        .bw-fields { display: flex; gap: 12px; flex-wrap: wrap; }
+
+        .bw-field {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: #f7f7f8;
+            border: 1px solid #d1d5db;
+            border-radius: 10px;
+            padding: 8px 12px;
+            font-size: 14px;
+            color: #374151;
+            flex: 1;
+            min-width: 150px;
+        }
+
+        .bw-field input {
+            flex: 1;
+            border: none;
+            background: transparent;
+            outline: none;
+            font-size: 15px;
+            width: 60px;
+            color: #202123;
+        }
+
+        .bw-unit { color: #8e8ea0; font-size: 13px; }
+
+        .bw-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+
+        .bw-skip {
+            background: #fff; color: #374151; border: 1px solid #d1d5db;
+            border-radius: 8px; padding: 9px 14px; font-size: 13px; font-weight: 600;
+        }
+        .bw-skip:hover { background: #f7f7f8; }
+
+        .bw-submit {
+            background: #10a37f; color: #fff; border: 1px solid #0d8c6d;
+            border-radius: 8px; padding: 9px 16px; font-size: 13px; font-weight: 600;
+        }
+        .bw-submit:hover { background: #0d8c6d; color: #fff; }
     </style>
 </head>
 <body>
@@ -1001,6 +1052,42 @@
             container.appendChild(panel);
         }
 
+        // Height / weight input fields (optional).
+        function renderBodyWidget(container, widget) {
+            const panel = document.createElement('div');
+            panel.className = 'body-widget';
+            panel.innerHTML = `
+                <div class="bw-fields">
+                    <label class="bw-field"><span>키</span><input type="number" id="bwHeight" min="100" max="230" placeholder="예: 170"><span class="bw-unit">cm</span></label>
+                    <label class="bw-field"><span>몸무게</span><input type="number" id="bwWeight" min="30" max="200" placeholder="예: 62"><span class="bw-unit">kg</span></label>
+                </div>
+                <div class="bw-actions">
+                    <button type="button" class="bw-skip">생략하고 진행</button>
+                    <button type="button" class="bw-submit">이 정보로 진행</button>
+                </div>
+            `;
+            panel.querySelector('.bw-skip').addEventListener('click', () => {
+                const input = document.getElementById('userInput');
+                input.value = '키와 몸무게는 생략할게요';
+                sendMessage();
+            });
+            panel.querySelector('.bw-submit').addEventListener('click', () => {
+                const h = (panel.querySelector('#bwHeight').value || '').trim();
+                const w = (panel.querySelector('#bwWeight').value || '').trim();
+                if (!h && !w) {
+                    showError('키 또는 몸무게를 입력하거나 "생략하고 진행"을 눌러주세요');
+                    return;
+                }
+                const parts = [];
+                if (h) parts.push(`키 ${h}cm`);
+                if (w) parts.push(`몸무게 ${w}kg`);
+                const input = document.getElementById('userInput');
+                input.value = parts.join(', ');
+                sendMessage();
+            });
+            container.appendChild(panel);
+        }
+
         // Orchestrate an assistant turn: animate tool steps, then reveal text,
         // approval prompt, widget, and clickable choices.
         async function renderAssistant(data) {
@@ -1043,6 +1130,8 @@
 
             if (data.widget && data.widget.type === 'day_time') {
                 renderDayTimeWidget(messageDiv, data.widget);
+            } else if (data.widget && data.widget.type === 'body_metrics') {
+                renderBodyWidget(messageDiv, data.widget);
             }
 
             renderChoices(messageDiv, getRenderableChoices(data));

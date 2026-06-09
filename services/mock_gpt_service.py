@@ -35,6 +35,18 @@ class MockGPTService:
         profile: Optional[str] = None
     ) -> str:
         is_auto = (condition == 'auto') or (autonomy_level == 'high')
+        goal, focus = self._detect_goal(profile, user_message)
+
+        def finish(body, auto_tail, ctrl_tail):
+            # In the control group a "modify" request arrives as override_instruction;
+            # reflect it so the change is visibly applied (demo mode is otherwise fixed).
+            if override_instruction:
+                return (
+                    f"요청을 반영해 수정했습니다.\n반영 내용: {override_instruction}\n\n"
+                    + body
+                    + "\n\n위 내용에 요청하신 부분을 반영했어요. 이대로 진행할까요, 더 바꿀 부분이 있나요?"
+                )
+            return body + ("\n\n" + auto_tail if is_auto else "\n\n" + ctrl_tail)
 
         if phase == 'intake':
             return (
@@ -47,20 +59,24 @@ class MockGPTService:
             )
 
         if phase == 'calc':
+            weight_line = ("- 가벼운 체중 조정을 위해 하루 약 200~300kcal 줄인 기준으로 잡았습니다"
+                           if goal == '체중 감량'
+                           else "- 체중 감량이 목표가 아니므로 균형 유지 기준으로 잡았습니다")
             body = (
-                "영양·에너지 가이드를 실행했습니다.\n"
-                "- 가정: 성인 기준 활동량 보통, 건강 유지 중심\n"
+                f"영양·에너지 가이드를 실행했습니다.\n"
+                f"선택하신 목표: {goal}\n"
+                "- 가정: 성인 기준 활동량 보통\n"
                 "- 하루 권장 섭취: 약 1,900 kcal\n"
                 "- 영양 비율: 탄수화물 45 / 단백질 30 / 지방 25\n"
                 "- 수분: 하루 약 1.5~2L\n"
-                "- 체중 감량을 원하실 경우에만 하루 약 200~300kcal 정도 가볍게 조정 가능"
+                f"{weight_line}"
             )
-            return body + ("\n\n이 가이드로 식단 구성을 진행하겠습니다." if is_auto
-                           else "\n\n이 영양 가이드로 진행할까요, 아니면 조정할 부분이 있나요?")
+            return finish(body, "이 가이드로 식단 구성을 진행하겠습니다.",
+                          "이 영양 가이드로 진행할까요, 아니면 조정할 부분이 있나요?")
 
         if phase == 'meal':
             body = (
-                "식단 데이터베이스를 조회했습니다.\n"
+                f"식단 데이터베이스를 조회했습니다. ({goal} 중심)\n"
                 "구성 원칙: 균형 잡힌 영양, 가공식품 최소화, 규칙적인 식사\n"
                 "하루 예시\n"
                 "- 아침: 그릭요거트 + 베리 + 견과 약간\n"
@@ -68,8 +84,8 @@ class MockGPTService:
                 "- 저녁: 채소볶음 + 미역국 + 잡곡밥\n"
                 "- 간식: 방울토마토, 삶은 달걀"
             )
-            return body + ("\n\n이 구성으로 운동 루틴을 설계하겠습니다." if is_auto
-                           else "\n\n이 식단 방향이 괜찮으신가요? 바꾸고 싶은 메뉴가 있으면 말씀해 주세요.")
+            return finish(body, "이 구성으로 운동 루틴을 설계하겠습니다.",
+                          "이 식단 방향이 괜찮으신가요? 바꾸고 싶은 메뉴가 있으면 말씀해 주세요.")
 
         if phase == 'workout':
             body = (
@@ -80,19 +96,22 @@ class MockGPTService:
                 "- 토: 가벼운 활동(스트레칭/산책)\n"
                 "- 수/일: 휴식일로 배치했습니다"
             )
-            return body + ("\n\n이 루틴으로 수면·생활습관을 설계하겠습니다." if is_auto
-                           else "\n\n휴식일 배치나 운동 종류를 바꾸고 싶으면 말씀해 주세요.")
+            return finish(body, "이 루틴으로 수면·생활습관을 설계하겠습니다.",
+                          "휴식일 배치나 운동 종류를 바꾸고 싶으면 말씀해 주세요.")
 
         if phase == 'sleep':
+            lead = ("수면 개선이 핵심 목표라 더 꼼꼼히 설계했습니다.\n"
+                    if goal == '수면의 질 개선' else "")
             body = (
                 "수면·생활습관 설계기를 실행했습니다.\n"
+                f"{lead}"
                 "- 권장 수면: 취침 23:30 / 기상 07:00 (약 7시간 30분)\n"
                 "- 취침 1시간 전 스크린 줄이기, 오후 2시 이후 카페인 자제\n"
                 "- 아침 기상 후 물 한 잔, 가벼운 스트레칭 5분\n"
                 "- 하루 한 번 10분 산책으로 스트레스 관리"
             )
-            return body + ("\n\n이 루틴으로 2주 일정을 편성하겠습니다." if is_auto
-                           else "\n\n수면 시간대나 생활습관을 조정하고 싶으면 말씀해 주세요.")
+            return finish(body, "이 루틴으로 2주 일정을 편성하겠습니다.",
+                          "수면 시간대나 생활습관을 조정하고 싶으면 말씀해 주세요.")
 
         if phase == 'schedule':
             lines = ["일정 편성기를 실행해 2주 루틴을 편성했습니다.\n"]
@@ -104,8 +123,8 @@ class MockGPTService:
                     f"수면 23:30-07:00{', 컨디션 점검' if d in (1, 8, 14) else ', 스트레칭 5분'}"
                 )
             body = "\n".join(lines)
-            return body + ("\n\n이대로 장보기 리스트까지 생성하겠습니다." if is_auto
-                           else "\n\n특정 날짜를 바꾸고 싶으면 'N일차 ...' 형태로 말씀해 주세요.")
+            return finish(body, "이대로 장보기 리스트까지 생성하겠습니다.",
+                          "특정 날짜를 바꾸고 싶으면 'N일차 ...' 형태로 말씀해 주세요.")
 
         if phase == 'grocery':
             body = (
@@ -115,14 +134,14 @@ class MockGPTService:
                 "탄수화물: 현미 1kg, 고구마 7개\n"
                 "기타: 견과류, 올리브유, 베리류"
             )
-            return body + ("\n\n루틴을 최종 정리하겠습니다." if is_auto
-                           else "\n\n빠진 품목이 있으면 알려주세요.")
+            return finish(body, "루틴을 최종 정리하겠습니다.", "빠진 품목이 있으면 알려주세요.")
 
         if phase == 'delivery':
             return (
                 "2주 건강 루틴을 최종 정리했습니다.\n\n"
                 "핵심 요약\n"
-                "- 목표: 전반적인 컨디션 향상 (체중 감량은 선택적으로 반영)\n"
+                f"- 목표: {goal}\n"
+                f"- 핵심 포인트: {focus}\n"
                 "- 식단: 하루 약 1,900kcal, 균형 잡힌 구성\n"
                 "- 운동: 주 5일(근력+유산소), 수/일 휴식\n"
                 "- 수면·생활습관: 취침 23:30 / 기상 07:00, 스트레칭·산책 루틴\n"
@@ -146,3 +165,19 @@ class MockGPTService:
             )
 
         return f"'{user_message}'에 대해 루틴 설계를 도와드리겠습니다."
+
+    @staticmethod
+    def _detect_goal(profile, user_message):
+        """Infer the chosen health goal from intake answers (demo heuristic)."""
+        text = f"{profile or ''} {user_message or ''}"
+        if '체중' in text or '감량' in text:
+            return '체중 감량', '건강한 범위의 가벼운 칼로리 조정 포함'
+        if '수면' in text:
+            return '수면의 질 개선', '수면 리듬 회복에 가장 집중'
+        if '운동 습관' in text or '규칙' in text:
+            return '규칙적인 운동 습관 만들기', '매일 실천 가능한 운동 습관 형성'
+        if '식습관' in text:
+            return '식습관 개선', '균형 잡힌 식습관 형성에 집중'
+        if '컨디션' in text or '에너지' in text:
+            return '전반적인 컨디션·에너지 향상', '에너지 수준과 일상 활력 향상'
+        return '건강한 생활 루틴', '식단·운동·수면의 균형'

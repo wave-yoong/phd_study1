@@ -83,10 +83,7 @@ class WorkflowManager:
             'stage': 'intake_body',
             'icon': 'body',
             'question': '마지막으로, 더 정확한 계획을 위해 키와 몸무게를 알려주실 수 있나요? (선택)',
-            'options': [
-                {'id': 'body_skip', 'label': '생략할게요', 'value': '키와 몸무게는 생략할게요'},
-                {'id': 'custom', 'label': '직접 입력', 'value': ''},
-            ],
+            'widget': {'type': 'body_metrics'},
         },
     ]
 
