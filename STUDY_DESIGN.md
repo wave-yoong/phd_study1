@@ -1,7 +1,8 @@
 # Study Design Notes & What the Researcher Must Provide
 
 This file is the bridge between the running code and your experimental protocol.
-The code gives you a working **agentic** diet-planner with a between-subjects
+The code gives you a working **agentic** wellness planner (diet + exercise +
+sleep/lifestyle; weight loss optional) with a between-subjects
 **user-control manipulation**. The items below are decisions/content that only you
 (the researcher) can finalize. Each points to exactly where to plug it in.
 
@@ -23,15 +24,21 @@ Assign condition via URL (`/?group=control`, `/?group=auto`) or let it randomize
 
 ## 2. What you still need to provide
 
-### A. Weight-loss target & safety framing  ⚠️ important
-The scenario target is now "2주 2kg" (revised down from 5kg, which was medically
-aggressive and risked becoming a **confound** — distrust of advice unrelated to
-control). Still confirm:
-- Whether 2kg/2주 fits your participant pool, **or** adjust further.
+### A. Goal framing & safety  ⚠️ important
+The scenario is now a **general wellness routine** (diet + exercise + sleep),
+with **weight loss as an optional health goal** rather than the central target.
+This deliberately removes the earlier "lose Nkg in 2 weeks" framing, which was
+medically aggressive and risked becoming a **confound** (distrust of advice
+unrelated to control). Still confirm:
+- That the wellness framing fits your hypothesis (you measure control, not advice
+  credibility).
+- The `intake_goal` options (one of which is "체중 감량 (선택)") — keep, reword, or
+  make multi-select.
 - Final safety/disclaimer wording for IRB.
 
-The target string lives in one place: `services/workflow_manager.py` → `GOAL`
-(used in the intake greeting). The scenario box copy is in `frontend/index.html`.
+The goal string lives in `services/workflow_manager.py` → `GOAL`; intake questions
+and options are in `INTAKE_STEPS` (same file); the scenario box copy is in
+`frontend/index.html`.
 
 Where to edit:
 - Scenario text: `frontend/index.html` (the `.scenario-box` block).

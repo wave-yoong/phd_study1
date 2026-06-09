@@ -1,27 +1,31 @@
-# AI Diet-Planning Agent — Architecture
+# AI Wellness Agent — Architecture
 
-Flask app for PhD Study 1 (Effect of User Control). An AI **agent** plans a 2-week
-diet + exercise + daily routine on the participant's behalf by running a pipeline
-of simulated tools, with experimental conditions that vary how much the user can
-control the agent.
+Flask app for PhD Study 1 (Effect of User Control). An AI **agent** designs a 2-week
+wellness routine (diet + exercise + sleep/lifestyle) on the participant's behalf by
+running a pipeline of simulated tools, with experimental conditions that vary how
+much the user can control the agent. Weight loss is an *optional* health goal, not
+the central objective.
 
 ## Agent pipeline
 
-The agent advances through ordered tool steps (`services/workflow_manager.py`):
+Intake is a sequential, clickable questionnaire (`intake_goal → intake_food →
+intake_exercise → intake_sleep → intake_body`), then the agent advances through
+ordered tool steps (`services/workflow_manager.py`):
 
 ```
-intake → calc → meal → workout → schedule → grocery → delivery → (delivered/closed)
+intake* → calc → meal → workout → sleep → schedule → grocery → delivery → (delivered/closed)
 ```
 
 | Phase | Simulated tool | Output |
 |-------|----------------|--------|
-| `intake` | – | collects goal + constraints (food prefs, available days, body info) |
-| `calc` | calorie_calculator | TDEE / target calories / macros |
-| `meal` | meal_database | meal composition + sample day |
+| `intake*` | – | sequential Q&A: health goal, food prefs, day×time-slot availability, sleep habits, body info (optional) |
+| `calc` | nutrition_guide | daily energy/calorie + macros + hydration (health-oriented; weight optional) |
+| `meal` | meal_database | balanced meal composition + sample day |
 | `workout` | workout_planner | 2-week workout principles + rest-day placement |
-| `schedule` | schedule_builder | day-by-day 14-day plan |
+| `sleep` | sleep_planner | sleep schedule + sleep hygiene + daily habits |
+| `schedule` | schedule_builder | day-by-day 14-day routine (diet/exercise/sleep) |
 | `grocery` | grocery_generator | week-1 grocery list |
-| `delivery` | plan_compiler | compiled final plan |
+| `delivery` | plan_compiler | compiled final routine |
 
 ## Conditions & control flow
 

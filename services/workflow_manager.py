@@ -20,20 +20,33 @@ class WorkflowManager:
     """
 
     # Ordered pipeline of agentic tool steps.
-    PIPELINE = ['calc', 'meal', 'workout', 'schedule', 'grocery', 'delivery']
+    PIPELINE = ['calc', 'meal', 'workout', 'sleep', 'schedule', 'grocery', 'delivery']
 
     # Sequential intake: one question at a time, each with clickable options
     # plus a free-text "기타" choice. Deterministic (no LLM) so both conditions
     # see identical onboarding.
-    GOAL = '2주 뒤 2kg 감량'
+    GOAL = '2주간 건강한 생활 루틴(식단·운동·수면) 만들기'
     INTAKE_GREETING = (
-        f'{GOAL} 목표로 식단·운동·일상 계획을 짜드리겠습니다.\n'
+        '안녕하세요! 2주간 건강한 생활 루틴을 함께 설계해 드릴게요.\n'
+        '식단·운동·수면과 일상 습관을 두루 살펴볼 거예요. '
         '맞춤 설계를 위해 몇 가지만 순서대로 여쭤볼게요.'
     )
     INTAKE_STEPS = [
         {
+            'stage': 'intake_goal',
+            'question': '이번 2주에 가장 중요하게 생각하는 건강 목표는 무엇인가요?',
+            'options': [
+                {'id': 'goal_overall', 'label': '전반적인 컨디션·에너지 향상', 'value': '전반적인 컨디션과 에너지를 끌어올리고 싶어요'},
+                {'id': 'goal_sleep', 'label': '수면의 질 개선', 'value': '수면의 질을 개선하고 싶어요'},
+                {'id': 'goal_habit', 'label': '규칙적인 운동 습관 만들기', 'value': '규칙적인 운동 습관을 만들고 싶어요'},
+                {'id': 'goal_diet', 'label': '식습관 개선', 'value': '식습관을 개선하고 싶어요'},
+                {'id': 'goal_weight', 'label': '체중 감량 (선택)', 'value': '체중 감량도 함께 고려하고 싶어요'},
+                {'id': 'custom', 'label': '기타 (직접 입력)', 'value': ''},
+            ],
+        },
+        {
             'stage': 'intake_food',
-            'question': '먼저 식단부터요. 좋아하거나 피하고 싶은 음식, 알레르기가 있나요?',
+            'question': '식단부터 볼게요. 좋아하거나 피하고 싶은 음식, 알레르기가 있나요?',
             'options': [
                 {'id': 'food_none', 'label': '특별히 가리는 것 없어요', 'value': '특별히 가리는 음식은 없어요'},
                 {'id': 'food_meat', 'label': '육류를 선호해요', 'value': '육류를 선호해요'},
@@ -44,12 +57,21 @@ class WorkflowManager:
         },
         {
             'stage': 'intake_exercise',
-            'question': '운동은 언제 가능하세요? 가능한 요일과 하루 시간대를 알려주세요.',
+            'question': '운동은 언제 가능하세요? 가능한 요일을 고르고, 각 요일의 시간대를 선택해 주세요.',
+            'widget': {
+                'type': 'day_time',
+                'days': ['월', '화', '수', '목', '금', '토', '일'],
+                'slots': ['오전', '오후', '저녁'],
+            },
+        },
+        {
+            'stage': 'intake_sleep',
+            'question': '평소 수면 습관은 어떤가요?',
             'options': [
-                {'id': 'ex_daily', 'label': '매일 가능해요', 'value': '매일 운동할 수 있어요'},
-                {'id': 'ex_weekday', 'label': '평일 위주', 'value': '평일 저녁에 주로 가능해요'},
-                {'id': 'ex_weekend', 'label': '주말 위주', 'value': '주말에 주로 가능해요'},
-                {'id': 'ex_short', 'label': '하루 30분 정도', 'value': '하루 30분 정도 낼 수 있어요'},
+                {'id': 'sleep_good', 'label': '규칙적이고 충분해요', 'value': '수면은 규칙적이고 충분한 편이에요'},
+                {'id': 'sleep_late', 'label': '늦게 자는 편이에요', 'value': '늦게 자는 편이에요'},
+                {'id': 'sleep_short', 'label': '수면이 부족하거나 얕아요', 'value': '수면이 부족하고 얕은 편이에요'},
+                {'id': 'sleep_irregular', 'label': '취침 시간이 불규칙해요', 'value': '취침 시간이 불규칙해요'},
                 {'id': 'custom', 'label': '기타 (직접 입력)', 'value': ''},
             ],
         },
@@ -63,25 +85,38 @@ class WorkflowManager:
         },
     ]
 
+    # tool: internal tool id (logged) · label: UI name · icon: frontend icon key
+    # approve: phase-specific question shown to the control group at the checkpoint
     TOOL_META = {
-        'calc': {'tool': 'calorie_calculator', 'label': '칼로리 계산기'},
-        'meal': {'tool': 'meal_database', 'label': '식단 데이터베이스'},
-        'workout': {'tool': 'workout_planner', 'label': '운동 루틴 설계기'},
-        'schedule': {'tool': 'schedule_builder', 'label': '2주 일정 편성기'},
-        'grocery': {'tool': 'grocery_generator', 'label': '장보기 리스트 생성기'},
-        'delivery': {'tool': 'plan_compiler', 'label': '계획 통합'},
+        'calc': {'tool': 'nutrition_guide', 'label': '영양·에너지 가이드', 'icon': 'calc',
+                 'approve': '이 영양 가이드로 식단을 구성할까요?'},
+        'meal': {'tool': 'meal_database', 'label': '식단 데이터베이스', 'icon': 'meal',
+                 'approve': '이 식단 구성으로 운동 계획을 세울까요?'},
+        'workout': {'tool': 'workout_planner', 'label': '운동 루틴 설계기', 'icon': 'workout',
+                    'approve': '이 운동 루틴으로 수면·생활습관 루틴을 설계할까요?'},
+        'sleep': {'tool': 'sleep_planner', 'label': '수면·생활습관 설계기', 'icon': 'sleep',
+                  'approve': '이 수면·생활습관 루틴으로 2주 일정을 편성할까요?'},
+        'schedule': {'tool': 'schedule_builder', 'label': '2주 일정 편성기', 'icon': 'calendar',
+                     'approve': '이 2주 일정으로 장보기 리스트를 만들까요?'},
+        'grocery': {'tool': 'grocery_generator', 'label': '장보기 리스트 생성기', 'icon': 'grocery',
+                    'approve': '이 리스트로 최종 계획을 정리할까요?'},
+        'delivery': {'tool': 'plan_compiler', 'label': '계획 통합', 'icon': 'plan',
+                     'approve': None},
     }
 
     STAGE_DESCRIPTIONS = {
+        'intake_goal': '건강 목표 확인',
         'intake_food': '식단 선호 확인',
         'intake_exercise': '운동 가능 시간 확인',
+        'intake_sleep': '수면 습관 확인',
         'intake_body': '신체 정보 확인 (선택)',
-        'calc': '칼로리/목표 산출 중',
+        'calc': '영양·에너지 가이드 산출 중',
         'meal': '식단 구성 중',
         'workout': '운동 루틴 설계 중',
+        'sleep': '수면·생활습관 루틴 설계 중',
         'schedule': '2주 일정 편성 중',
         'grocery': '장보기 리스트 생성 중',
-        'delivered': '2주 계획 전달 완료',
+        'delivered': '2주 루틴 전달 완료',
         'paused': '사용자 개입으로 일시 중단',
         'closed': '대화 종료',
     }
@@ -135,7 +170,7 @@ class WorkflowManager:
             return self._handle_checkpoint(conversation_id, condition, autonomy, stage, user_message)
 
         # Fallback: restart intake.
-        return self._run_intake(conversation_id, condition, user_message)
+        return self._ask_intake(conversation_id, 0, condition, autonomy, user_message, greet=True)
 
     # ------------------------------------------------------------------ #
     # Phase runners
@@ -150,7 +185,7 @@ class WorkflowManager:
         self, conversation_id: int, idx: int, condition: str, autonomy: str,
         user_message: str, greet: bool = False
     ) -> Dict[str, Any]:
-        """Ask one intake question with clickable options (deterministic)."""
+        """Ask one intake question with clickable options or a widget (deterministic)."""
         step = self.INTAKE_STEPS[idx]
         response = (self.INTAKE_GREETING + '\n\n' + step['question']) if greet else step['question']
         self.db_manager.add_message(conversation_id, 'assistant', response)
@@ -160,7 +195,8 @@ class WorkflowManager:
         )
         return self._result(
             response, step['stage'], condition, autonomy,
-            agent_actions=[], controls=False, choices=step['options']
+            agent_actions=[], controls=False,
+            choices=step.get('options'), widget=step.get('widget')
         )
 
     def _run_single_phase(
@@ -188,8 +224,14 @@ class WorkflowManager:
         )
         actions = [self._action_card(phase)]
         controls = (condition == 'control') and not is_last
-        return self._result(response, stage, condition, autonomy,
-                            agent_actions=actions, controls=controls)
+        steps = [self._step_card(phase, response)]
+        approval_prompt = meta['approve'] if (condition == 'control' and not is_last) else None
+        # The step card carries the content; keep the message body empty to avoid
+        # duplicating it. For the final plan, add a short confirmation note.
+        note = '계획이 완성됐습니다. 특정 항목을 바꾸고 싶으면 알려주세요.' if is_last else ''
+        return self._result(note, stage, condition, autonomy,
+                            agent_actions=actions, controls=controls,
+                            steps=steps, approval_prompt=approval_prompt)
 
     def _run_pipeline(
         self, conversation_id: int, condition: str, start_phase: str,
@@ -202,6 +244,7 @@ class WorkflowManager:
         history = self.db_manager.get_conversation_messages(conversation_id)
         working_history = list(history)
         actions: List[Dict[str, str]] = []
+        steps: List[Dict[str, str]] = []
         parts: List[str] = []
 
         for i, phase in enumerate(phases):
@@ -220,18 +263,18 @@ class WorkflowManager:
             )
             working_history.append({'role': 'assistant', 'content': text})
             actions.append(self._action_card(phase))
+            steps.append(self._step_card(phase, text))
             parts.append(f"[{meta['label']}]\n{text}")
 
-        combined = "\n\n".join(parts)
+        closing = ("계획을 모두 확정했습니다. 그대로 따라 주시면 됩니다."
+                   if condition == 'auto'
+                   else "계획이 완성됐습니다. 특정 항목을 바꾸고 싶으면 알려주세요.")
+        combined = "\n\n".join(parts) + "\n\n" + closing
         self.db_manager.add_message(conversation_id, 'assistant', combined)
 
-        closing = ("\n\n계획을 모두 확정했습니다. 그대로 따라 주시면 됩니다."
-                   if condition == 'auto'
-                   else "\n\n계획이 완성됐습니다. 특정 항목을 바꾸고 싶으면 알려주세요.")
-        combined_out = combined + closing
-
-        return self._result(combined_out, 'delivered', condition, 'high',
-                            agent_actions=actions, controls=False)
+        # The autonomous run reveals every step (animated) but never pauses.
+        return self._result(closing, 'delivered', condition, 'high',
+                            agent_actions=actions, controls=False, steps=steps)
 
     # ------------------------------------------------------------------ #
     # Control-group interaction handlers
@@ -368,7 +411,18 @@ class WorkflowManager:
         return {
             'tool': meta['tool'],
             'label': label or meta['label'],
+            'icon': meta.get('icon', 'plan'),
             'status': '실행 완료',
+        }
+
+    def _step_card(self, phase: str, content: str) -> Dict[str, str]:
+        """A pipeline step the frontend reveals with a working->done animation."""
+        meta = self.TOOL_META[phase]
+        return {
+            'tool': meta['tool'],
+            'label': meta['label'],
+            'icon': meta.get('icon', 'plan'),
+            'content': content,
         }
 
     def _classify_intent(self, user_message: str) -> str:
@@ -398,7 +452,10 @@ class WorkflowManager:
         self, response: str, stage: str, condition: str, autonomy: str,
         agent_actions: List[Dict[str, str]], controls: bool,
         resumable: bool = False, post_plan: bool = False,
-        choices: Optional[List[Dict[str, str]]] = None
+        choices: Optional[List[Dict[str, str]]] = None,
+        widget: Optional[Dict[str, Any]] = None,
+        steps: Optional[List[Dict[str, str]]] = None,
+        approval_prompt: Optional[str] = None
     ) -> Dict[str, Any]:
         return {
             'response': response,
@@ -411,5 +468,8 @@ class WorkflowManager:
             'resumable': resumable,
             'post_plan': post_plan,
             'choices': choices,
+            'widget': widget,
+            'steps': steps,
+            'approval_prompt': approval_prompt,
             'awaiting_input': stage not in ('closed',),
         }

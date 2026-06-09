@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI 다이어트 플래너 에이전트 - PhD Study</title>
+    <title>AI 웰니스 에이전트 - PhD Study</title>
     <style>
         * {
             margin: 0;
@@ -436,6 +436,193 @@
         .error-message.active {
             display: block;
         }
+
+        /* ---- Agent tool steps (animated working -> done) ---- */
+        .agent-steps {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+
+        .agent-step {
+            border: 1px solid #e6e8f0;
+            border-radius: 12px;
+            overflow: hidden;
+            background: #fbfcff;
+            opacity: 0;
+            transform: translateY(8px);
+            transition: opacity 0.3s ease, transform 0.3s ease;
+        }
+
+        .agent-step.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .agent-step-head {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 11px 13px;
+        }
+
+        .agent-step-icon {
+            width: 30px;
+            height: 30px;
+            border-radius: 8px;
+            background: #eef2ff;
+            color: #4f46e5;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .agent-step.done .agent-step-icon {
+            background: #e7f7f0;
+            color: #0d8c6d;
+        }
+
+        .agent-step-label {
+            font-weight: 600;
+            font-size: 14px;
+            color: #1f2937;
+        }
+
+        .agent-step-status {
+            margin-left: auto;
+            font-size: 12px;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            color: #6b7280;
+        }
+
+        .agent-step.done .agent-step-status {
+            color: #16a34a;
+        }
+
+        .spinner {
+            width: 14px;
+            height: 14px;
+            border: 2px solid #c7d2fe;
+            border-top-color: #4f46e5;
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .agent-step-body {
+            padding: 0 14px;
+            max-height: 0;
+            overflow: hidden;
+            font-size: 14px;
+            line-height: 1.6;
+            color: #2b2f36;
+            border-top: 1px solid transparent;
+            transition: max-height 0.4s ease, padding 0.4s ease;
+        }
+
+        .agent-step.reveal .agent-step-body {
+            max-height: 1600px;
+            padding: 12px 14px;
+            border-top: 1px solid #eef0f6;
+        }
+
+        .approval-prompt {
+            margin: 8px 0 2px;
+            padding: 12px 14px;
+            background: #fff7ed;
+            border: 1px solid #fed7aa;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 600;
+            color: #9a3412;
+        }
+
+        /* ---- Day / time availability widget ---- */
+        .day-time-widget {
+            margin-top: 10px;
+            border: 1px solid #e5e7eb;
+            border-radius: 14px;
+            padding: 6px 4px;
+            background: #fff;
+        }
+
+        .dt-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 7px 10px;
+            border-top: 1px solid #f1f2f4;
+        }
+
+        .dt-row:first-child { border-top: none; }
+
+        .dt-day {
+            width: 34px;
+            height: 34px;
+            border-radius: 999px;
+            border: 1px solid #e5e7eb;
+            background: #f9fafb;
+            font-weight: 700;
+            font-size: 14px;
+            color: #6b7280;
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+
+        .dt-day.active {
+            background: #10a37f;
+            border-color: #0d8c6d;
+            color: #fff;
+        }
+
+        .dt-slots {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+
+        .dt-slot {
+            padding: 7px 12px;
+            border-radius: 999px;
+            border: 1px solid #e5e7eb;
+            background: #fff;
+            font-size: 13px;
+            color: #9ca3af;
+            cursor: pointer;
+        }
+
+        .dt-row.active .dt-slot { color: #374151; }
+
+        .dt-slot.active {
+            background: #eef8f5;
+            border-color: #10a37f;
+            color: #0d8c6d;
+            font-weight: 600;
+        }
+
+        .dt-actions {
+            display: flex;
+            justify-content: flex-end;
+            padding: 10px;
+        }
+
+        .dt-submit {
+            padding: 9px 16px;
+            background: #10a37f;
+            color: #fff;
+            border: 1px solid #0d8c6d;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .dt-submit:hover { background: #0d8c6d; color: #fff; }
+        .dt-hint { padding: 0 12px 6px; font-size: 12px; color: #8e8ea0; }
     </style>
 </head>
 <body>
@@ -454,7 +641,7 @@
                         <path d="M16 6.5c4.6 1.2 7 4.7 7 9 0 4.6-3 8-7 10-4-2-7-5.4-7-10 0-4.3 2.4-7.8 7-9z" fill="#ffffff" opacity="0.95"/>
                         <path d="M11 16.4h2.1l1.3-2.7 1.9 5 1.3-2.5H21" fill="none" stroke="#0c7a5e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
                     </svg>
-                    <span class="brand-name">AI Diet Planner</span>
+                    <span class="brand-name">AI Wellness Agent</span>
                 </span>
             </div>
             <button class="btn-reset" onclick="resetChat()">New Chat</button>
@@ -465,11 +652,12 @@
                 <div class="message-content">
                     <div class="scenario-box">
                         <div class="scenario-title">시나리오 (실험 참가자 전용)</div>
-                        당신은 2주 뒤 2kg 감량을 목표로 다이어트를 하고 있습니다.
-                        당신의 AI 에이전트는 목표 체중을 위해 운동과 식단 계획을 대신 짜줍니다.
-                        AI 에이전트와 대화하면서 2주의 식단과 운동 및 일상을 계획해 주세요.
+                        당신은 앞으로 2주간 더 건강한 생활 루틴을 만들고 싶어 합니다.
+                        당신의 AI 웰니스 에이전트는 식단·운동·수면과 일상 습관을 포함한 2주 루틴을 대신 설계해 줍니다.
+                        체중 감량 같은 특정 목표가 있다면 선택적으로 반영할 수 있습니다.
+                        AI 에이전트와 대화하면서 2주간의 건강 루틴을 함께 계획해 주세요.
                         <div class="scenario-start">
-                            <button type="button" class="start-btn" onclick="startPlanning()">AI 에이전트와 계획 시작하기</button>
+                            <button type="button" class="start-btn" onclick="startPlanning()">AI 에이전트와 루틴 설계 시작하기</button>
                         </div>
                     </div>
                 </div>
@@ -503,6 +691,54 @@
             const div = document.createElement('div');
             div.textContent = text == null ? '' : String(text);
             return div.innerHTML;
+        }
+
+        const delay = (ms) => new Promise(r => setTimeout(r, ms));
+
+        // Inline SVG icons for each simulated agent tool.
+        function iconSvg(name) {
+            const P = 'fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"';
+            const icons = {
+                calc: `<rect x="5" y="3" width="14" height="18" rx="2" ${P}/><line x1="9" y1="7" x2="15" y2="7" ${P}/><line x1="9" y1="11" x2="9" y2="11" ${P}/><line x1="12" y1="11" x2="12" y2="11" ${P}/><line x1="15" y1="11" x2="15" y2="11" ${P}/><line x1="9" y1="15" x2="9" y2="15" ${P}/><line x1="12" y1="15" x2="12" y2="15" ${P}/>`,
+                meal: `<path d="M6 3v8a2 2 0 0 0 4 0V3M8 3v18" ${P}/><path d="M16 3c-1.5 0-2.5 2-2.5 5s1 4 2.5 4 2.5-1 2.5-4-1-5-2.5-5zM16 12v9" ${P}/>`,
+                workout: `<path d="M6.5 8v8M17.5 8v8M3.5 10v4M20.5 10v4M6.5 12h11" ${P}/>`,
+                calendar: `<rect x="4" y="5" width="16" height="16" rx="2" ${P}/><line x1="4" y1="9" x2="20" y2="9" ${P}/><line x1="8" y1="3" x2="8" y2="6" ${P}/><line x1="16" y1="3" x2="16" y2="6" ${P}/>`,
+                grocery: `<circle cx="9" cy="20" r="1.3" ${P}/><circle cx="17" cy="20" r="1.3" ${P}/><path d="M3 4h2l2.2 11.2a1.5 1.5 0 0 0 1.5 1.2h8.1a1.5 1.5 0 0 0 1.5-1.2L21 8H6" ${P}/>`,
+                plan: `<path d="M9 4h6a1 1 0 0 1 1 1v0a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1v0a1 1 0 0 1 1-1z" ${P}/><path d="M8 5H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2" ${P}/><path d="M8.5 13l2 2 4-4" ${P}/>`,
+                sleep: `<path d="M20 14.5A8 8 0 1 1 9.5 4 6.2 6.2 0 0 0 20 14.5z" ${P}/>`,
+            };
+            return `<svg width="17" height="17" viewBox="0 0 24 24" aria-hidden="true">${icons[name] || icons.plan}</svg>`;
+        }
+
+        const CHECK_SVG = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+
+        // Reveal one tool step: spinner ("실행 중") -> check ("완료") -> body fades in.
+        async function animateStep(container, step) {
+            const card = document.createElement('div');
+            card.className = 'agent-step';
+            card.innerHTML = `
+                <div class="agent-step-head">
+                    <span class="agent-step-icon">${iconSvg(step.icon)}</span>
+                    <span class="agent-step-label">${escapeHtml(step.label || '도구')}</span>
+                    <span class="agent-step-status"><span class="spinner"></span>실행 중...</span>
+                </div>
+                <div class="agent-step-body">${convertLinksToClickable(escapeHtml(step.content || '').replace(/\n/g, '<br>'))}</div>
+            `;
+            container.appendChild(card);
+            scrollToBottom();
+            requestAnimationFrame(() => card.classList.add('show'));
+            await delay(850);
+            card.classList.add('done');
+            card.querySelector('.agent-step-status').innerHTML = `${CHECK_SVG} 완료`;
+            await delay(120);
+            card.classList.add('reveal');
+            scrollToBottom();
+            await delay(420);
+        }
+
+        function scrollToBottom() {
+            const chatArea = document.getElementById('chatArea');
+            chatArea.scrollTop = chatArea.scrollHeight;
         }
 
         function renderAgentActions(actions) {
@@ -633,6 +869,144 @@
             }
         }
 
+        // Interactive day x time-slot availability picker.
+        function renderDayTimeWidget(container, widget) {
+            const days = widget.days || ['월', '화', '수', '목', '금', '토', '일'];
+            const slots = widget.slots || ['오전', '오후', '저녁'];
+            const selected = {}; // day -> Set(slots)
+
+            const panel = document.createElement('div');
+            panel.className = 'day-time-widget';
+
+            days.forEach(day => {
+                const row = document.createElement('div');
+                row.className = 'dt-row';
+
+                const dayBtn = document.createElement('button');
+                dayBtn.type = 'button';
+                dayBtn.className = 'dt-day';
+                dayBtn.textContent = day;
+
+                const slotsWrap = document.createElement('div');
+                slotsWrap.className = 'dt-slots';
+
+                const syncDay = () => {
+                    const has = selected[day] && selected[day].size > 0;
+                    dayBtn.classList.toggle('active', !!has);
+                    row.classList.toggle('active', !!has);
+                };
+
+                slots.forEach(slot => {
+                    const sBtn = document.createElement('button');
+                    sBtn.type = 'button';
+                    sBtn.className = 'dt-slot';
+                    sBtn.textContent = slot;
+                    sBtn.addEventListener('click', () => {
+                        if (sBtn.disabled) return;
+                        if (!selected[day]) selected[day] = new Set();
+                        if (selected[day].has(slot)) {
+                            selected[day].delete(slot);
+                            sBtn.classList.remove('active');
+                        } else {
+                            selected[day].add(slot);
+                            sBtn.classList.add('active');
+                        }
+                        syncDay();
+                    });
+                    slotsWrap.appendChild(sBtn);
+                });
+
+                // Tapping the day toggles all slots on/off quickly.
+                dayBtn.addEventListener('click', () => {
+                    const has = selected[day] && selected[day].size > 0;
+                    if (has) {
+                        selected[day].clear();
+                        slotsWrap.querySelectorAll('.dt-slot').forEach(b => b.classList.remove('active'));
+                    } else {
+                        selected[day] = new Set(slots);
+                        slotsWrap.querySelectorAll('.dt-slot').forEach(b => b.classList.add('active'));
+                    }
+                    syncDay();
+                });
+
+                row.appendChild(dayBtn);
+                row.appendChild(slotsWrap);
+                panel.appendChild(row);
+            });
+
+            const hint = document.createElement('div');
+            hint.className = 'dt-hint';
+            hint.textContent = '가능한 요일과 각 요일의 시간대를 선택한 뒤 "선택 완료"를 눌러주세요.';
+            panel.appendChild(hint);
+
+            const actions = document.createElement('div');
+            actions.className = 'dt-actions';
+            const submit = document.createElement('button');
+            submit.type = 'button';
+            submit.className = 'dt-submit';
+            submit.textContent = '선택 완료';
+            submit.addEventListener('click', () => {
+                if (submit.disabled) return;
+                const parts = days
+                    .filter(d => selected[d] && selected[d].size > 0)
+                    .map(d => `${d} ${slots.filter(s => selected[d].has(s)).join('·')}`);
+                if (parts.length === 0) {
+                    showError('가능한 요일과 시간대를 하나 이상 선택해주세요');
+                    return;
+                }
+                const input = document.getElementById('userInput');
+                input.value = '운동 가능: ' + parts.join(', ');
+                sendMessage();
+            });
+            actions.appendChild(submit);
+            panel.appendChild(actions);
+
+            container.appendChild(panel);
+        }
+
+        // Orchestrate an assistant turn: animate tool steps, then reveal text,
+        // approval prompt, widget, and clickable choices.
+        async function renderAssistant(data) {
+            const chatArea = document.getElementById('chatArea');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message assistant';
+            chatArea.appendChild(messageDiv);
+
+            const steps = Array.isArray(data.steps) ? data.steps : [];
+            if (steps.length > 0) {
+                const stepsWrap = document.createElement('div');
+                stepsWrap.className = 'agent-steps';
+                messageDiv.appendChild(stepsWrap);
+                for (const step of steps) {
+                    await animateStep(stepsWrap, step);
+                }
+            } else if (Array.isArray(data.agent_actions) && data.agent_actions.length) {
+                messageDiv.insertAdjacentHTML('beforeend', renderAgentActions(data.agent_actions));
+            }
+
+            const text = (data.response || '').trim();
+            if (text) {
+                const contentDiv = document.createElement('div');
+                contentDiv.className = 'message-content';
+                contentDiv.innerHTML = convertLinksToClickable(escapeHtml(text).replace(/\n/g, '<br>'));
+                messageDiv.appendChild(contentDiv);
+            }
+
+            if (data.approval_prompt) {
+                const ap = document.createElement('div');
+                ap.className = 'approval-prompt';
+                ap.textContent = data.approval_prompt;
+                messageDiv.appendChild(ap);
+            }
+
+            if (data.widget && data.widget.type === 'day_time') {
+                renderDayTimeWidget(messageDiv, data.widget);
+            }
+
+            renderChoices(messageDiv, getRenderableChoices(data));
+            scrollToBottom();
+        }
+
         function addMessage(role, content, isSystem = false, choices = [], agentActions = []) {
             const chatArea = document.getElementById('chatArea');
             const messageDiv = document.createElement('div');
@@ -737,10 +1111,10 @@
                 if (!conversationId) {
                     conversationId = data.conversation_id;
                 }
-                
-                addMessage('assistant', data.response, false, getRenderableChoices(data), data.agent_actions || []);
+
                 setLoading(false);
-                
+                await renderAssistant(data);
+
             } catch (error) {
                 showError('Error: ' + error.message);
                 setLoading(false);
@@ -749,7 +1123,7 @@
         
         function startPlanning() {
             const input = document.getElementById('userInput');
-            input.value = '2주 뒤 2kg 감량이 목표예요. 식단과 운동 계획을 짜줘';
+            input.value = '앞으로 2주간 더 건강한 생활 루틴을 만들고 싶어요. 식단·운동·수면 계획을 짜줘';
             sendMessage();
         }
 

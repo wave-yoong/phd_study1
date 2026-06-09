@@ -116,6 +116,9 @@ def _serialize(result: dict, **extra) -> dict:
         'condition': result.get('condition'),
         'autonomy_level': result.get('autonomy_level'),
         'agent_actions': result.get('agent_actions', []),
+        'steps': result.get('steps'),
+        'widget': result.get('widget'),
+        'approval_prompt': result.get('approval_prompt'),
         'awaiting_input': result.get('awaiting_input', True),
         'choices': _build_choices(result),
     }
