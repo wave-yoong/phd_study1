@@ -1,5 +1,11 @@
 import os
+import sys
 import random
+
+# Allow running this file directly (e.g. `python backend/app.py` or VS Code's
+# Run button) by ensuring the repository root is on sys.path for package imports.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from flask import Flask, request, jsonify, render_template, session
 from dotenv import load_dotenv
 from services.workflow_manager import WorkflowManager
