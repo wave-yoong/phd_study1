@@ -119,6 +119,7 @@ def _serialize(result: dict, **extra) -> dict:
         'steps': result.get('steps'),
         'widget': result.get('widget'),
         'approval_prompt': result.get('approval_prompt'),
+        'intake_icon': result.get('intake_icon'),
         'awaiting_input': result.get('awaiting_input', True),
         'choices': _build_choices(result),
     }

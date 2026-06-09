@@ -179,7 +179,8 @@ class GPTService:
         user_message: str,
         conversation_history: List[Dict[str, str]],
         autonomy_level: str = 'low',
-        override_instruction: Optional[str] = None
+        override_instruction: Optional[str] = None,
+        profile: Optional[str] = None
     ) -> str:
         """
         Generate a planning-agent response for the given phase and condition.
@@ -203,6 +204,13 @@ class GPTService:
         # The autonomy dial only changes pacing for in-pipeline phases.
         if phase in ('calc', 'meal', 'workout', 'schedule', 'grocery'):
             system_prompt += AUTONOMY_MODIFIERS.get(autonomy_level, AUTONOMY_MODIFIERS['low'])
+
+        if profile:
+            system_prompt += (
+                f"\n\n사용자 프로필(intake 응답): {profile}\n"
+                "이 프로필의 목표·선호를 반드시 반영해 루틴을 구성하세요. "
+                "체중 감량이 언급되지 않았다면 감량 중심으로 몰아가지 마세요."
+            )
 
         if override_instruction:
             system_prompt += f"\n\n사용자 수정 요청: {override_instruction}"

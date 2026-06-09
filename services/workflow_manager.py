@@ -34,18 +34,20 @@ class WorkflowManager:
     INTAKE_STEPS = [
         {
             'stage': 'intake_goal',
+            'icon': 'goal',
             'question': '이번 2주에 가장 중요하게 생각하는 건강 목표는 무엇인가요?',
             'options': [
                 {'id': 'goal_overall', 'label': '전반적인 컨디션·에너지 향상', 'value': '전반적인 컨디션과 에너지를 끌어올리고 싶어요'},
                 {'id': 'goal_sleep', 'label': '수면의 질 개선', 'value': '수면의 질을 개선하고 싶어요'},
                 {'id': 'goal_habit', 'label': '규칙적인 운동 습관 만들기', 'value': '규칙적인 운동 습관을 만들고 싶어요'},
                 {'id': 'goal_diet', 'label': '식습관 개선', 'value': '식습관을 개선하고 싶어요'},
-                {'id': 'goal_weight', 'label': '체중 감량 (선택)', 'value': '체중 감량도 함께 고려하고 싶어요'},
+                {'id': 'goal_weight', 'label': '체중 감량', 'value': '체중 감량도 함께 고려하고 싶어요'},
                 {'id': 'custom', 'label': '기타 (직접 입력)', 'value': ''},
             ],
         },
         {
             'stage': 'intake_food',
+            'icon': 'meal',
             'question': '식단부터 볼게요. 좋아하거나 피하고 싶은 음식, 알레르기가 있나요?',
             'options': [
                 {'id': 'food_none', 'label': '특별히 가리는 것 없어요', 'value': '특별히 가리는 음식은 없어요'},
@@ -57,6 +59,7 @@ class WorkflowManager:
         },
         {
             'stage': 'intake_exercise',
+            'icon': 'workout',
             'question': '운동은 언제 가능하세요? 가능한 요일을 고르고, 각 요일의 시간대를 선택해 주세요.',
             'widget': {
                 'type': 'day_time',
@@ -66,6 +69,7 @@ class WorkflowManager:
         },
         {
             'stage': 'intake_sleep',
+            'icon': 'sleep',
             'question': '평소 수면 습관은 어떤가요?',
             'options': [
                 {'id': 'sleep_good', 'label': '규칙적이고 충분해요', 'value': '수면은 규칙적이고 충분한 편이에요'},
@@ -77,6 +81,7 @@ class WorkflowManager:
         },
         {
             'stage': 'intake_body',
+            'icon': 'body',
             'question': '마지막으로, 더 정확한 계획을 위해 키와 몸무게를 알려주실 수 있나요? (선택)',
             'options': [
                 {'id': 'body_skip', 'label': '생략할게요', 'value': '키와 몸무게는 생략할게요'},
@@ -196,7 +201,8 @@ class WorkflowManager:
         return self._result(
             response, step['stage'], condition, autonomy,
             agent_actions=[], controls=False,
-            choices=step.get('options'), widget=step.get('widget')
+            choices=step.get('options'), widget=step.get('widget'),
+            intake_icon=step.get('icon')
         )
 
     def _run_single_phase(
@@ -209,7 +215,8 @@ class WorkflowManager:
         response = self.gpt_service.generate_agent_response(
             condition=condition, phase=phase, user_message=user_message,
             conversation_history=history, autonomy_level=autonomy,
-            override_instruction=override_instruction
+            override_instruction=override_instruction,
+            profile=self._user_profile(conversation_id)
         )
         meta = self.TOOL_META[phase]
         is_last = (phase == 'delivery')
@@ -243,6 +250,7 @@ class WorkflowManager:
 
         history = self.db_manager.get_conversation_messages(conversation_id)
         working_history = list(history)
+        profile = self._user_profile(conversation_id)
         actions: List[Dict[str, str]] = []
         steps: List[Dict[str, str]] = []
         parts: List[str] = []
@@ -250,7 +258,8 @@ class WorkflowManager:
         for i, phase in enumerate(phases):
             text = self.gpt_service.generate_agent_response(
                 condition=condition, phase=phase, user_message=user_message,
-                conversation_history=working_history, autonomy_level='high'
+                conversation_history=working_history, autonomy_level='high',
+                profile=profile
             )
             meta = self.TOOL_META[phase]
             log_stage = 'delivered' if phase == 'delivery' else phase
@@ -406,6 +415,15 @@ class WorkflowManager:
         idx = self.PIPELINE.index(phase)
         return self.PIPELINE[idx + 1] if idx + 1 < len(self.PIPELINE) else None
 
+    def _user_profile(self, conversation_id: int) -> str:
+        """Summarize the participant's intake answers so every pipeline phase is
+        tailored to their stated goal/preferences (not weight-loss by default)."""
+        msgs = self.db_manager.get_conversation_messages(conversation_id)
+        user_msgs = [m['content'] for m in msgs if m.get('role') == 'user']
+        # user_msgs[0] is the opening request; the next answers are the intake replies.
+        answers = user_msgs[1:1 + len(self.INTAKE_STEPS)]
+        return ' / '.join(a for a in answers if a)
+
     def _action_card(self, phase: str, label: Optional[str] = None) -> Dict[str, str]:
         meta = self.TOOL_META[phase]
         return {
@@ -455,7 +473,8 @@ class WorkflowManager:
         choices: Optional[List[Dict[str, str]]] = None,
         widget: Optional[Dict[str, Any]] = None,
         steps: Optional[List[Dict[str, str]]] = None,
-        approval_prompt: Optional[str] = None
+        approval_prompt: Optional[str] = None,
+        intake_icon: Optional[str] = None
     ) -> Dict[str, Any]:
         return {
             'response': response,
@@ -471,5 +490,6 @@ class WorkflowManager:
             'widget': widget,
             'steps': steps,
             'approval_prompt': approval_prompt,
+            'intake_icon': intake_icon,
             'awaiting_input': stage not in ('closed',),
         }

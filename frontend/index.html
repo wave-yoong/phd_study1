@@ -542,6 +542,26 @@
             color: #9a3412;
         }
 
+        .intake-icon {
+            display: inline-flex;
+            vertical-align: -3px;
+            margin-right: 7px;
+            color: #10a37f;
+        }
+
+        .cond-badge {
+            display: none;
+            font-size: 12px;
+            font-weight: 700;
+            padding: 4px 10px;
+            border-radius: 999px;
+            margin-left: 4px;
+        }
+
+        .cond-badge.show { display: inline-flex; align-items: center; }
+        .cond-badge.control { background: #e7f7f0; color: #0d8c6d; border: 1px solid #b6e6d4; }
+        .cond-badge.auto { background: #eef2ff; color: #4f46e5; border: 1px solid #d6dcff; }
+
         /* ---- Day / time availability widget ---- */
         .day-time-widget {
             margin-top: 10px;
@@ -643,6 +663,7 @@
                     </svg>
                     <span class="brand-name">AI Wellness Agent</span>
                 </span>
+                <span id="condBadge" class="cond-badge"></span>
             </div>
             <button class="btn-reset" onclick="resetChat()">New Chat</button>
         </div>
@@ -686,6 +707,20 @@
         // Experimental condition can be set via ?group=control or ?group=auto.
         const urlParams = new URLSearchParams(window.location.search);
         const assignedGroup = urlParams.get('group') || '';
+        const debugMode = urlParams.get('debug') === '1';
+
+        // Show which experimental condition is active (helpful while testing).
+        // Visible by default in ?debug=1, and always logged to the console.
+        function showCondition(condition) {
+            if (!condition) return;
+            console.log('[study] assigned condition =', condition,
+                condition === 'control' ? '(user-control: 단계별 승인 O)' : '(autonomous: 승인 X)');
+            const badge = document.getElementById('condBadge');
+            if (!badge || !debugMode) return;
+            badge.classList.remove('control', 'auto');
+            badge.classList.add('show', condition);
+            badge.textContent = condition === 'control' ? '통제 O (control)' : '통제 X (auto)';
+        }
 
         function escapeHtml(text) {
             const div = document.createElement('div');
@@ -706,6 +741,8 @@
                 grocery: `<circle cx="9" cy="20" r="1.3" ${P}/><circle cx="17" cy="20" r="1.3" ${P}/><path d="M3 4h2l2.2 11.2a1.5 1.5 0 0 0 1.5 1.2h8.1a1.5 1.5 0 0 0 1.5-1.2L21 8H6" ${P}/>`,
                 plan: `<path d="M9 4h6a1 1 0 0 1 1 1v0a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1v0a1 1 0 0 1 1-1z" ${P}/><path d="M8 5H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2" ${P}/><path d="M8.5 13l2 2 4-4" ${P}/>`,
                 sleep: `<path d="M20 14.5A8 8 0 1 1 9.5 4 6.2 6.2 0 0 0 20 14.5z" ${P}/>`,
+                goal: `<circle cx="12" cy="12" r="8" ${P}/><circle cx="12" cy="12" r="4" ${P}/><circle cx="12" cy="12" r="0.6" ${P}/>`,
+                body: `<circle cx="12" cy="6.5" r="2.6" ${P}/><path d="M6.5 21v-2a5.5 5.5 0 0 1 11 0v2" ${P}/>`,
             };
             return `<svg width="17" height="17" viewBox="0 0 24 24" aria-hidden="true">${icons[name] || icons.plan}</svg>`;
         }
@@ -988,7 +1025,12 @@
             if (text) {
                 const contentDiv = document.createElement('div');
                 contentDiv.className = 'message-content';
-                contentDiv.innerHTML = convertLinksToClickable(escapeHtml(text).replace(/\n/g, '<br>'));
+                let inner = convertLinksToClickable(escapeHtml(text).replace(/\n/g, '<br>'));
+                // Intake questions get a small leading icon for a more visual feel.
+                if (data.intake_icon) {
+                    inner = `<span class="intake-icon">${iconSvg(data.intake_icon)}</span>` + inner;
+                }
+                contentDiv.innerHTML = inner;
                 messageDiv.appendChild(contentDiv);
             }
 
@@ -1110,6 +1152,9 @@
                 
                 if (!conversationId) {
                     conversationId = data.conversation_id;
+                }
+                if (data.condition) {
+                    showCondition(data.condition);
                 }
 
                 setLoading(false);

@@ -31,7 +31,8 @@ class MockGPTService:
         user_message: str,
         conversation_history: List[Dict[str, str]],
         autonomy_level: str = 'low',
-        override_instruction: Optional[str] = None
+        override_instruction: Optional[str] = None,
+        profile: Optional[str] = None
     ) -> str:
         is_auto = (condition == 'auto') or (autonomy_level == 'high')
 
