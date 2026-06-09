@@ -761,12 +761,30 @@
     
     <script>
         // Bump this whenever the UI changes so we can confirm the running build.
-        const BUILD = 'wellness-build-7 · goal-branching intake';
+        const BUILD = 'wellness-build-8 · goal-branching intake';
+        const EXPECTED_SERVER_BUILD = 'wellness-build-8';
         console.log('[study] UI ' + BUILD);
         window.addEventListener('DOMContentLoaded', () => {
             const t = document.getElementById('buildTag');
-            if (t) t.textContent = BUILD;
+            if (t) t.textContent = 'UI ' + BUILD;
         });
+
+        // Confirm the BACKEND is also up to date; a stale server (old Python on the
+        // port) is the usual reason new question flows don't appear.
+        function showServerBuild(serverBuild) {
+            if (!serverBuild) return;
+            console.log('[study] server build =', serverBuild);
+            const t = document.getElementById('buildTag');
+            const stale = serverBuild !== EXPECTED_SERVER_BUILD;
+            if (t) {
+                t.textContent = `UI ${BUILD}  |  server ${serverBuild}`;
+                t.style.color = stale ? '#c0392b' : '#9aa6a0';
+            }
+            if (stale) {
+                console.warn('[study] ⚠️ 서버가 옛 코드입니다. 포트 5000의 옛 서버를 종료하고 다시 시작하세요.');
+                showError('⚠️ 서버가 옛 코드(' + serverBuild + ')입니다. 서버를 재시작해야 최신 동작이 적용됩니다.');
+            }
+        }
 
         let conversationId = null;
 
@@ -1260,6 +1278,7 @@
                 if (data.condition) {
                     showCondition(data.condition);
                 }
+                showServerBuild(data.server_build);
 
                 setLoading(false);
                 await renderAssistant(data);

@@ -11,6 +11,11 @@ from dotenv import load_dotenv
 from services.workflow_manager import WorkflowManager
 from database.db_manager import DBManager
 
+# Backend build marker — surfaced in API responses and /health so a stale server
+# (old Python still bound to the port) is immediately obvious.
+APP_BUILD = 'wellness-build-8'
+print(f"[study] backend {APP_BUILD} starting", file=sys.stderr)
+
 # Load environment variables
 load_dotenv()
 
@@ -122,6 +127,7 @@ def _serialize(result: dict, **extra) -> dict:
         'intake_icon': result.get('intake_icon'),
         'awaiting_input': result.get('awaiting_input', True),
         'choices': _build_choices(result),
+        'server_build': APP_BUILD,
     }
     payload.update(extra)
     return payload
@@ -205,7 +211,7 @@ def reset_conversation():
 
 @app.route('/health')
 def health():
-    return jsonify({'status': 'ok', 'gpt_service': gpt_service.model})
+    return jsonify({'status': 'ok', 'gpt_service': gpt_service.model, 'server_build': APP_BUILD})
 
 
 if __name__ == '__main__':
