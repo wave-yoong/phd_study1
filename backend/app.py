@@ -13,7 +13,7 @@ from database.db_manager import DBManager
 
 # Backend build marker — surfaced in API responses and /health so a stale server
 # (old Python still bound to the port) is immediately obvious.
-APP_BUILD = 'wellness-build-10'
+APP_BUILD = 'wellness-build-11'
 print(f"[study] backend {APP_BUILD} starting", file=sys.stderr)
 
 # Load environment variables

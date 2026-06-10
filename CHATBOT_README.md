@@ -16,6 +16,12 @@ ordered tool steps (`services/workflow_manager.py`):
 intake* → calc → meal → workout → sleep → schedule → grocery → delivery → (delivered/closed)
 ```
 
+The pipeline is **goal-adaptive** (`WorkflowManager.PIPELINES`): diet-centric steps
+(calc/meal/grocery) and the food intake question are dropped for goals where food
+is not the focus — sleep (`sleep → workout → schedule → delivery`) and exercise
+habit (`workout → sleep → schedule → delivery`). diet / weight / overall goals run
+the full pipeline. Both experimental conditions go through the same intake.
+
 | Phase | Simulated tool | Output |
 |-------|----------------|--------|
 | `intake*` | – | sequential Q&A: health goal, food prefs, day×time-slot availability, sleep habits, body info (optional) |

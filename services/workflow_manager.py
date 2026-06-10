@@ -19,8 +19,18 @@ class WorkflowManager:
                     are logged as the key behavioral DV.
     """
 
-    # Ordered pipeline of agentic tool steps.
+    # Default (full) pipeline of agentic tool steps.
     PIPELINE = ['calc', 'meal', 'workout', 'sleep', 'schedule', 'grocery', 'delivery']
+
+    # Goal-adaptive pipelines: diet-centric steps (calc/meal/grocery) are dropped
+    # for goals where food is not the focus (sleep, exercise habit).
+    PIPELINES = {
+        'sleep':   ['sleep', 'workout', 'schedule', 'delivery'],
+        'habit':   ['workout', 'sleep', 'schedule', 'delivery'],
+        'diet':    ['calc', 'meal', 'workout', 'sleep', 'schedule', 'grocery', 'delivery'],
+        'weight':  ['calc', 'meal', 'workout', 'sleep', 'schedule', 'grocery', 'delivery'],
+        'overall': ['calc', 'meal', 'workout', 'sleep', 'schedule', 'grocery', 'delivery'],
+    }
 
     # Sequential intake: one question at a time, each with clickable options
     # plus a free-text "기타" choice. Deterministic (no LLM) so both conditions
@@ -182,10 +192,11 @@ class WorkflowManager:
     }
 
     # Goal-specific question order (after the goal question). Each ends with q_body.
+    # Sleep / habit goals skip the food question (their pipeline has no diet step).
     FLOWS = {
-        'sleep':   ['q_sleep_time', 'q_sleep_issue', 'q_food', 'q_exercise', 'q_body'],
+        'sleep':   ['q_sleep_time', 'q_sleep_issue', 'q_exercise', 'q_body'],
         'diet':    ['q_diet_pattern', 'q_eatout', 'q_food', 'q_exercise', 'q_body'],
-        'habit':   ['q_ex_level', 'q_ex_pref', 'q_exercise', 'q_food', 'q_body'],
+        'habit':   ['q_ex_level', 'q_ex_pref', 'q_exercise', 'q_body'],
         'weight':  ['q_weight_target', 'q_activity', 'q_food', 'q_exercise', 'q_body'],
         'overall': ['q_energy', 'q_food', 'q_exercise', 'q_sleep', 'q_body'],
     }
@@ -195,19 +206,21 @@ class WorkflowManager:
 
     # tool: internal tool id (logged) · label: UI name · icon: frontend icon key
     # approve: phase-specific question shown to the control group at the checkpoint
+    # approve text is order-independent ('~대로 진행할까요?') so it stays correct
+    # regardless of which goal-adaptive pipeline is in use.
     TOOL_META = {
         'calc': {'tool': 'nutrition_guide', 'label': '영양·에너지 가이드', 'icon': 'calc',
-                 'approve': '이 영양 가이드로 식단을 구성할까요?'},
+                 'approve': '이 영양 가이드대로 진행할까요?'},
         'meal': {'tool': 'meal_database', 'label': '식단 데이터베이스', 'icon': 'meal',
-                 'approve': '이 식단 구성으로 운동 계획을 세울까요?'},
+                 'approve': '이 식단 구성대로 진행할까요?'},
         'workout': {'tool': 'workout_planner', 'label': '운동 루틴 설계기', 'icon': 'workout',
-                    'approve': '이 운동 루틴으로 수면·생활습관 루틴을 설계할까요?'},
+                    'approve': '이 운동 루틴대로 진행할까요?'},
         'sleep': {'tool': 'sleep_planner', 'label': '수면·생활습관 설계기', 'icon': 'sleep',
-                  'approve': '이 수면·생활습관 루틴으로 2주 일정을 편성할까요?'},
+                  'approve': '이 수면·생활습관 루틴대로 진행할까요?'},
         'schedule': {'tool': 'schedule_builder', 'label': '2주 일정 편성기', 'icon': 'calendar',
-                     'approve': '이 2주 일정으로 장보기 리스트를 만들까요?'},
+                     'approve': '이 2주 일정대로 진행할까요?'},
         'grocery': {'tool': 'grocery_generator', 'label': '장보기 리스트 생성기', 'icon': 'grocery',
-                    'approve': '이 리스트로 최종 계획을 정리할까요?'},
+                    'approve': '이 장보기 리스트대로 진행할까요?'},
         'delivery': {'tool': 'plan_compiler', 'label': '계획 통합', 'icon': 'plan',
                      'approve': None},
     }
@@ -324,10 +337,11 @@ class WorkflowManager:
             next_id = flow[idx + 1] if idx + 1 < len(flow) else None
 
         if next_id is None:
-            # Intake complete -> launch the agentic pipeline.
+            # Intake complete -> launch the goal-adaptive pipeline at its first step.
+            first_phase = self._pipeline(conversation_id)[0]
             if condition == 'auto' or autonomy == 'high':
-                return self._run_pipeline(conversation_id, condition, 'calc', user_message, autonomy)
-            return self._run_single_phase(conversation_id, condition, 'calc', user_message, autonomy)
+                return self._run_pipeline(conversation_id, condition, first_phase, user_message, autonomy)
+            return self._run_single_phase(conversation_id, condition, first_phase, user_message, autonomy)
 
         # Position-aware connector so wording fits the flow (먼저 / 이제 / 마지막으로).
         pos = flow.index(next_id)
@@ -385,7 +399,8 @@ class WorkflowManager:
         )
         actions = [self._action_card(phase)]
         controls = (condition == 'control') and not is_last
-        steps = [self._step_card(phase, response, visual=self._step_visual(phase))]
+        has_diet = 'meal' in self._pipeline(conversation_id)
+        steps = [self._step_card(phase, response, visual=self._step_visual(phase, has_diet))]
         approval_prompt = meta['approve'] if (condition == 'control' and not is_last) else None
         # The step card carries the content; keep the message body empty to avoid
         # duplicating it. For the final plan, add a short confirmation note.
@@ -399,8 +414,10 @@ class WorkflowManager:
         user_message: str, autonomy: str, intervention: Optional[str] = None
     ) -> Dict[str, Any]:
         """Run all remaining tool steps end-to-end and deliver the plan (autonomous)."""
-        start_idx = self.PIPELINE.index(start_phase)
-        phases = self.PIPELINE[start_idx:]
+        pipeline = self._pipeline(conversation_id)
+        start_idx = pipeline.index(start_phase) if start_phase in pipeline else 0
+        phases = pipeline[start_idx:]
+        has_diet = 'meal' in pipeline
 
         history = self.db_manager.get_conversation_messages(conversation_id)
         working_history = list(history)
@@ -426,7 +443,7 @@ class WorkflowManager:
             )
             working_history.append({'role': 'assistant', 'content': text})
             actions.append(self._action_card(phase))
-            steps.append(self._step_card(phase, text, visual=self._step_visual(phase)))
+            steps.append(self._step_card(phase, text, visual=self._step_visual(phase, has_diet)))
             parts.append(f"[{meta['label']}]\n{text}")
 
         closing = ("계획을 모두 확정했습니다. 그대로 따라 주시면 됩니다."
@@ -451,7 +468,9 @@ class WorkflowManager:
         # Raise autonomy -> let the agent finish the rest by itself.
         if intent == 'raise_autonomy':
             self.db_manager.set_autonomy_level(conversation_id, 'high')
-            next_phase = self._next_phase(stage)
+            next_phase = self._next_phase(conversation_id, stage)
+            if next_phase is None:
+                return self._handle_post_plan(conversation_id, condition, 'high', user_message)
             return self._run_pipeline(conversation_id, condition, next_phase,
                                       user_message, 'high', intervention='raise_autonomy')
 
@@ -471,7 +490,7 @@ class WorkflowManager:
             )
 
         # Approve / continue -> advance to next pipeline step.
-        next_phase = self._next_phase(stage)
+        next_phase = self._next_phase(conversation_id, stage)
         if next_phase is None:
             return self._handle_post_plan(conversation_id, condition, autonomy, user_message)
         return self._run_single_phase(
@@ -527,7 +546,7 @@ class WorkflowManager:
         resume_from = self._resume_target.get(conversation_id)
 
         if intent in ('approve', 'raise_autonomy') and resume_from:
-            next_phase = self._next_phase(resume_from) or resume_from
+            next_phase = self._next_phase(conversation_id, resume_from) or resume_from
             if intent == 'raise_autonomy':
                 self.db_manager.set_autonomy_level(conversation_id, 'high')
                 return self._run_pipeline(conversation_id, condition, next_phase,
@@ -592,9 +611,16 @@ class WorkflowManager:
     # Per-process memory of where each conversation paused (best-effort).
     _resume_target: Dict[int, str] = {}
 
-    def _next_phase(self, phase: str) -> Optional[str]:
-        idx = self.PIPELINE.index(phase)
-        return self.PIPELINE[idx + 1] if idx + 1 < len(self.PIPELINE) else None
+    def _pipeline(self, conversation_id: int) -> List[str]:
+        """The goal-adaptive pipeline for this conversation."""
+        return self.PIPELINES.get(self._goal_key(conversation_id), self.PIPELINE)
+
+    def _next_phase(self, conversation_id: int, phase: str) -> Optional[str]:
+        pipeline = self._pipeline(conversation_id)
+        if phase not in pipeline:
+            return None
+        idx = pipeline.index(phase)
+        return pipeline[idx + 1] if idx + 1 < len(pipeline) else None
 
     def _user_profile(self, conversation_id: int) -> str:
         """Summarize the participant's intake answers so every pipeline phase is
@@ -628,7 +654,7 @@ class WorkflowManager:
     # Canonical baseline values, shared by the visuals and the demo content.
     MACROS = {'kcal': 1900, 'carb': 45, 'protein': 30, 'fat': 25}
 
-    def _step_visual(self, phase: str) -> Optional[Dict[str, Any]]:
+    def _step_visual(self, phase: str, has_diet: bool = True) -> Optional[Dict[str, Any]]:
         """Structured data the frontend renders as an infographic (macro bar / calendar)."""
         if phase == 'calc':
             m = self.MACROS
@@ -654,7 +680,8 @@ class WorkflowManager:
             return {
                 'type': 'calendar',
                 'sleep_summary': '매일 취침 23:30 · 기상 07:00 (약 7.5시간)',
-                'diet_summary': f"매일 약 {self.MACROS['kcal']:,}kcal 균형식 (3끼 + 가벼운 간식)",
+                'diet_summary': (f"매일 약 {self.MACROS['kcal']:,}kcal 균형식 (3끼 + 가벼운 간식)"
+                                 if has_diet else ''),
                 'days': days,
             }
         return None
