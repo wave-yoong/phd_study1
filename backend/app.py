@@ -1,9 +1,20 @@
 import os
+import sys
 import random
+
+# Allow running this file directly (e.g. `python backend/app.py` or VS Code's
+# Run button) by ensuring the repository root is on sys.path for package imports.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from flask import Flask, request, jsonify, render_template, session
 from dotenv import load_dotenv
 from services.workflow_manager import WorkflowManager
 from database.db_manager import DBManager
+
+# Backend build marker — surfaced in API responses and /health so a stale server
+# (old Python still bound to the port) is immediately obvious.
+APP_BUILD = 'wellness-build-16'
+print(f"[study] backend {APP_BUILD} starting", file=sys.stderr)
 
 # Load environment variables
 load_dotenv()
@@ -67,7 +78,15 @@ def _assign_condition(requested: str) -> str:
 
 
 def _build_choices(result: dict) -> list:
-    """Build clickable control affordances. Only the control group gets levers."""
+    """Resolve clickable choices for a step.
+
+    Intake questions supply their own option list (shown to both conditions);
+    otherwise only the control group gets steering levers.
+    """
+    # Intake (and any handler that pre-built choices) takes precedence.
+    if result.get('choices') is not None:
+        return result['choices']
+
     if result.get('condition') != CONDITION_CONTROL:
         return []
 
@@ -102,8 +121,18 @@ def _serialize(result: dict, **extra) -> dict:
         'condition': result.get('condition'),
         'autonomy_level': result.get('autonomy_level'),
         'agent_actions': result.get('agent_actions', []),
+        'steps': result.get('steps'),
+        'widget': result.get('widget'),
+        'approval_prompt': result.get('approval_prompt'),
+        'intake_icon': result.get('intake_icon'),
+        'modify_options': result.get('modify_options'),
         'awaiting_input': result.get('awaiting_input', True),
         'choices': _build_choices(result),
+        # Keep the input hidden until the user explicitly selects a free-text
+        # action such as "항목 수정 요청".
+        'show_input': bool(result.get('show_input', False)),
+        'input_placeholder': '바꾸고 싶은 항목을 입력하세요 · 예: 3일차 운동을 요가로',
+        'server_build': APP_BUILD,
     }
     payload.update(extra)
     return payload
@@ -187,7 +216,7 @@ def reset_conversation():
 
 @app.route('/health')
 def health():
-    return jsonify({'status': 'ok', 'gpt_service': gpt_service.model})
+    return jsonify({'status': 'ok', 'gpt_service': gpt_service.model, 'server_build': APP_BUILD})
 
 
 if __name__ == '__main__':

@@ -12,6 +12,13 @@ or:
     python -m backend.app
 """
 
+import os
+import sys
+
+# Make the repository root importable so `backend` / `services` resolve even when
+# this file is executed directly (python backend/run.py).
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from backend.app import app
 
 if __name__ == '__main__':

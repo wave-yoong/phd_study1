@@ -14,17 +14,21 @@ from typing import List, Dict, Optional
 # dial on the FRONTEND; the prompts below only shape the agent's tone per phase.
 # ---------------------------------------------------------------------------
 
-AGENT_PERSONA = """당신은 사용자의 다이어트 목표를 대신 달성해 주는 AI 에이전트입니다.
-사용자는 2주 뒤 체중 감량을 목표로 하고 있고, 당신은 식단·운동·일상 계획을 직접 설계합니다.
+AGENT_PERSONA = """당신은 사용자의 2주간 건강한 생활 루틴을 대신 설계해 주는 AI 웰니스 에이전트입니다.
+당신은 식단·운동·수면 및 일상 습관을 아우르는 2주 루틴을 직접 설계합니다.
+
+목표에 대한 관점:
+- 핵심 목표는 전반적인 건강과 컨디션 향상입니다. 체중 감량은 '중심 목표'가 아니라, 사용자가 원할 때만 반영하는 선택적 건강 목표로 다루세요.
+- 사용자가 체중 감량을 언급하지 않았다면 감량 중심으로 몰아가지 말고, 균형 잡힌 식사·규칙적 운동·충분한 수면 등 지속 가능한 습관 중심으로 설계하세요.
 
 작동 방식:
-- 당신은 여러 내부 도구(칼로리 계산기, 식단 데이터베이스, 운동 루틴 설계기, 일정 편성기, 장보기 리스트 생성기)를 사용해 작업합니다.
-- 단순히 정보를 알려주는 조수가 아니라, 계획을 실제로 '짜서 산출물로 내놓는' 에이전트처럼 행동하세요.
+- 당신은 여러 내부 도구(영양·에너지 가이드, 식단 데이터베이스, 운동 루틴 설계기, 수면·생활습관 설계기, 일정 편성기, 장보기 리스트 생성기)를 사용해 작업합니다.
+- 단순히 정보를 알려주는 조수가 아니라, 루틴을 실제로 '짜서 산출물로 내놓는' 에이전트처럼 행동하세요.
 
 전역 규칙:
 - 마크다운 서식(**, __, *, #, 표 기호 |) 절대 사용 금지. 일반 텍스트로만 작성하세요.
 - 목록 상위 항목은 숫자 번호, 하위 항목은 하이픈(-)으로 작성하세요.
-- 의학적 안전: 무리한 단식이나 위험한 급격한 감량을 권하지 말고, 건강한 범위(주당 약 0.5~1kg)를 전제로 계획하세요. 필요 시 짧게 안전 안내를 덧붙이세요.
+- 건강 안전: 무리한 단식이나 위험한 급격한 감량을 권하지 마세요. 체중 목표가 있어도 건강한 범위(주당 약 0.5kg 내외)를 전제로 하고, 필요 시 짧게 안전 안내를 덧붙이세요.
 - 답변은 간결하게. 한 단계에서 다음 단계 내용까지 미리 전부 쏟아내지 마세요."""
 
 # Tone differences between the two experimental conditions.
@@ -55,40 +59,63 @@ PHASE_INSTRUCTIONS = {
 - 참고할 현재 신체 정보(키/몸무게/활동량)는 선택 사항이며, 답하지 않으면 일반적인 가정을 쓰겠다고 안내
 질문은 3~4개 이내로 짧게. 아직 계획 내용은 만들지 마세요.""",
 
-    'calc': """[도구 실행: 칼로리 계산기]
-사용자 정보(없으면 일반적 가정)를 바탕으로 하루 권장 섭취 칼로리와 목표 소모 칼로리, 대략적인 영양 비율(탄단지)을 산출해 제시하세요.
+    'calc': """[도구 실행: 영양·에너지 가이드]
+사용자 정보(없으면 일반적 가정)를 바탕으로 하루 권장 섭취 에너지(칼로리)와 대략적인 영양 비율(탄단지), 수분 섭취 가이드를 건강 유지 관점에서 제시하세요.
 - 어떤 가정을 썼는지 한 줄로 밝히세요.
-- 2주간 건강한 감량 목표치를 현실적으로 제시하세요(무리한 수치 금지).
+- 사용자가 체중 감량을 원한 경우에만 건강한 범위의 가벼운 칼로리 조정을 덧붙이세요. 원하지 않았다면 감량 수치를 강요하지 말고 균형 유지 기준으로 제시하세요.
 숫자와 근거만 간단히. 식단 메뉴는 아직 만들지 마세요.""",
 
     'meal': """[도구 실행: 식단 데이터베이스]
-앞서 계산한 칼로리 목표에 맞춰 식단 구성 방향과 대표 끼니 예시(아침/점심/저녁/간식)를 제시하세요.
+앞서 제시한 영양 가이드에 맞춰 식단 구성 방향과 대표 끼니 예시(아침/점심/저녁/간식)를 제시하세요.
 - 사용자의 음식 선호/제약을 반영하세요.
+- "균형식" 같은 추상적인 표현만 쓰지 말고 목표에 맞는 구체적인 전략을 쓰세요.
+  예: 체중 감량이면 단백질을 충분히 챙기고 튀김·포화지방을 줄이기,
+  식습관 개선이면 채소·통곡물을 늘리고 야식·군것질 빈도를 낮추기.
+- 과도한 제한은 피하세요.
 - 아직 14일 전체를 나열하지 말고, 구성 원칙과 하루 샘플 정도만 보여주세요.""",
 
     'workout': """[도구 실행: 운동 루틴 설계기]
 2주 운동 루틴의 구성 원칙과 요일 배치 방향, 대표 운동 예시를 제시하세요.
-- 사용자의 운동 가능 요일/시간을 반영하세요.
+- 사용자가 밝힌 현재 운동 빈도·수준·선호 운동을 출발점으로 삼으세요.
+- 사용자가 선택한 운동 가능 요일과 시간대에만 주요 운동을 배치하세요.
+- 현재 거의 운동하지 않는다면 첫 주는 짧고 낮은 강도로 시작하고, 기존에 운동 중이면
+  그 루틴을 유지하거나 조금 확장하는 점진적 계획으로 만드세요.
+- 어떤 현재 루틴 정보를 어떻게 반영했는지 한 문장으로 명시하세요.
 - 휴식일을 어디에 둘지 당신이 판단해 제안/결정하세요.""",
 
+    'sleep': """[도구 실행: 수면·생활습관 설계기]
+사용자의 수면 습관을 바탕으로 2주간 수면·생활습관 루틴을 설계하세요.
+- 권장 취침/기상 시간대, 수면 위생 팁(취침 전 습관, 카페인/스크린 등)을 제시하세요.
+- 수분 섭취, 스트레칭, 스트레스 관리 같은 일상 습관도 1~2개 포함하세요.
+- 사용자의 수면 상태(부족/불규칙 등)에 맞춰 개선 포인트를 짚으세요.""",
+
     'schedule': """[도구 실행: 일정 편성기]
-지금까지의 식단/운동을 합쳐 2주(14일) 일자별 계획을 편성하세요.
-- 1일차부터 14일차까지, 각 날에 [식단 요약 / 운동 / 일상 팁]을 한두 줄로 표 대신 줄글 형태로 정리하세요.
-- 휴식일, 체중 측정일 등은 당신이 합리적으로 배치하세요.
+지금까지의 식단/운동/수면·생활습관을 합쳐 2주(14일) 일자별 루틴을 편성하세요.
+- 1일차부터 14일차까지, 각 날에 [식단 요약 / 운동 / 수면·생활습관]을 한두 줄로 표 대신 줄글 형태로 정리하세요.
+- 휴식일, 컨디션 점검일 등은 당신이 합리적으로 배치하세요.
 - 너무 길면 핵심만. 마크다운 표 기호(|)는 쓰지 마세요.""",
 
     'grocery': """[도구 실행: 장보기 리스트 생성기]
-편성한 식단을 바탕으로 1주차 장보기 리스트를 카테고리(단백질/채소/탄수화물/기타)별로 생성하세요.
-간단한 분량 안내를 덧붙여도 좋습니다.""",
+편성한 식단을 바탕으로 1주차와 2주차 장보기 리스트를 모두 생성하세요.
+- 두 주의 재료와 메뉴가 반복되지 않도록 단백질·채소·탄수화물 구성을 다르게 제안하세요.
+- 각 주를 단백질/채소/탄수화물/기타 카테고리로 나누고 대략적인 분량을 적으세요.
+- 한국의 일반 대형마트 가격을 기준으로 주차별 예상 예산 범위와 2주 총예산을 원 단위로 적으세요.
+- 가격은 지역·브랜드·보유 식재료에 따라 달라질 수 있다는 짧은 안내를 포함하세요.""",
 
-    'delivery': """[단계: 최종 계획 전달]
-지금까지 만든 칼로리 목표, 식단, 운동, 2주 일정, 장보기 리스트를 하나의 완성된 2주 계획으로 정리해 전달하세요.
-- 핵심 요약 + 일자별 계획 + 마지막에 짧은 안전/실천 안내로 마무리하세요.
+    'delivery': """[단계: 최종 루틴 전달]
+지금까지 만든 영양 가이드, 식단, 운동, 수면·생활습관, 2주 일정, 장보기 리스트를 하나의 완성된 2주 건강 루틴으로 정리해 전달하세요.
+- 식단 요약은 "하루 약 N kcal 균형식"으로 끝내지 말고 사용자의 목표에 맞는
+  구체적인 식사 전략(예: 단백질 충분히, 지방·야식 줄이기)을 적으세요.
+- 운동 요약에는 사용자의 기존 운동 빈도와 가능한 요일·시간을 어떻게 반영했는지 적으세요.
+- 장보기는 1주차와 2주차가 다르다는 점과 주차별 예상 예산을 포함하세요.
+- 핵심 요약 + 일자별 루틴 + 마지막에 짧은 건강/실천 안내로 마무리하세요.
 - 마크다운 서식 금지.""",
 
     'override': """[사용자 항목 수정 요청 처리]
 사용자가 계획의 특정 항목(예: 특정 날짜 식단/운동) 변경을 요청했습니다.
 - 요청한 항목만 정확히 찾아 수정하고, 바뀐 부분을 명확히 보여주세요.
+- "수정했습니다"라고만 답하지 말고, 수정 후 최신 항목의 내용을 구체적으로 다시 적으세요.
+- 사용자의 표현을 그대로 읽고 날짜·운동·메뉴·시간 등 요청한 값을 실제 결과에 반영하세요.
 - 나머지 계획은 그대로 유지된다는 점을 알리세요.
 - 수정 후 추가로 바꿀 부분이 있는지 물어보세요(통제 조건).""",
 
@@ -102,7 +129,8 @@ PHASE_INSTRUCTIONS = {
 class GPTService:
     """Service for interacting with Azure OpenAI or OpenAI GPT API.
 
-    Exposes a diet/exercise planning agent geared toward the user-control study.
+    Exposes a wellness planning agent (diet, exercise, sleep/lifestyle) geared
+    toward the user-control study.
     """
 
     def __init__(self, api_key: str = None, use_azure: bool = True):
@@ -167,7 +195,8 @@ class GPTService:
         user_message: str,
         conversation_history: List[Dict[str, str]],
         autonomy_level: str = 'low',
-        override_instruction: Optional[str] = None
+        override_instruction: Optional[str] = None,
+        profile: Optional[str] = None
     ) -> str:
         """
         Generate a planning-agent response for the given phase and condition.
@@ -184,15 +213,36 @@ class GPTService:
             Agent response text (plain text, no markdown)
         """
         condition = condition if condition in CONDITION_MODIFIERS else 'control'
-        phase_instruction = PHASE_INSTRUCTIONS.get(phase, PHASE_INSTRUCTIONS['intake'])
+        is_question = bool(override_instruction and override_instruction.startswith('__QUESTION__'))
 
-        system_prompt = AGENT_PERSONA + "\n\n" + CONDITION_MODIFIERS[condition] + "\n\n" + phase_instruction
+        if is_question:
+            # The user asked about the current step; explain rather than rebuild it.
+            question = override_instruction.replace('__QUESTION__', '', 1).strip()
+            system_prompt = (
+                AGENT_PERSONA + "\n\n" + CONDITION_MODIFIERS[condition] + "\n\n"
+                + "[사용자 질문에 답변]\n"
+                + f"사용자가 방금 단계에 대해 질문했습니다: {question}\n"
+                + "그 질문에 대해 충분히 구체적으로, 그렇게 설계한 이유와 근거(수치·원리)를 들어 설명하세요. "
+                + "'균형 유지 기준' 같은 한 줄짜리 답이 아니라 2~4문장으로 친절히 설명하세요. "
+                + "설명 후에는 단계 내용을 다시 만들지 말고, 마지막에 '이대로 진행할까요, 아니면 바꿔드릴까요?'로 마무리하세요."
+            )
+        else:
+            phase_instruction = PHASE_INSTRUCTIONS.get(phase, PHASE_INSTRUCTIONS['intake'])
+            system_prompt = AGENT_PERSONA + "\n\n" + CONDITION_MODIFIERS[condition] + "\n\n" + phase_instruction
+            # The autonomy dial only changes pacing for in-pipeline phases.
+            if phase in ('calc', 'meal', 'workout', 'sleep', 'schedule', 'grocery'):
+                system_prompt += AUTONOMY_MODIFIERS.get(autonomy_level, AUTONOMY_MODIFIERS['low'])
 
-        # The autonomy dial only changes pacing for in-pipeline phases.
-        if phase in ('calc', 'meal', 'workout', 'schedule', 'grocery'):
-            system_prompt += AUTONOMY_MODIFIERS.get(autonomy_level, AUTONOMY_MODIFIERS['low'])
+        if profile:
+            system_prompt += (
+                f"\n\n사용자 프로필(intake 응답): {profile}\n"
+                "이 프로필의 목표·선호를 반드시 반영해 루틴을 구성하세요. "
+                "체중 감량이 언급되지 않았다면 감량 중심으로 몰아가지 마세요. "
+                "특히 운동 단계에서는 현재 운동 빈도·선호와 '운동 가능:' 뒤의 요일·시간대를 "
+                "실제 운동 배치에 직접 사용하고, 반영한 내용을 답변에 명시하세요."
+            )
 
-        if override_instruction:
+        if override_instruction and not is_question:
             system_prompt += f"\n\n사용자 수정 요청: {override_instruction}"
 
         messages = [{"role": "system", "content": system_prompt}]

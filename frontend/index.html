@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI 다이어트 플래너 에이전트 - PhD Study</title>
+    <title>AI 웰니스 에이전트 - PhD Study</title>
     <style>
         * {
             margin: 0;
@@ -54,6 +54,50 @@
             display: flex;
             align-items: center;
             gap: 12px;
+        }
+
+        .brand-logo {
+            display: inline-flex;
+            align-items: center;
+            gap: 9px;
+        }
+
+        .brand-logo svg {
+            display: block;
+            border-radius: 9px;
+        }
+
+        .brand-name {
+            font-size: 16px;
+            font-weight: 700;
+            color: #202123;
+            letter-spacing: -0.2px;
+        }
+
+        .scenario-start {
+            margin-top: 14px;
+        }
+
+        .build-tag {
+            margin-top: 10px;
+            font-size: 11px;
+            color: #9aa6a0;
+        }
+
+        .start-btn {
+            background: #10a37f;
+            color: #ffffff;
+            border: 1px solid #0d8c6d;
+            border-radius: 8px;
+            padding: 10px 16px;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .start-btn:hover {
+            background: #0d8c6d;
+            border-color: #0d8c6d;
+            color: #ffffff;
         }
         
         
@@ -289,6 +333,9 @@
             width: 100%;
         }
         
+        .input-group.hidden { display: none; }
+        .modify-menu { margin-top: 8px; }
+
         .input-group {
             display: flex;
             gap: 8px;
@@ -398,13 +445,443 @@
         .error-message.active {
             display: block;
         }
+
+        /* ---- Agent tool steps (animated working -> done) ---- */
+        .agent-steps {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+
+        .agent-step {
+            border: 1px solid #e6e8f0;
+            border-radius: 12px;
+            overflow: hidden;
+            background: #fbfcff;
+            opacity: 0;
+            transform: translateY(8px);
+            transition: opacity 0.3s ease, transform 0.3s ease;
+        }
+
+        .agent-step.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .agent-step-head {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 11px 13px;
+        }
+
+        .agent-step-icon {
+            width: 30px;
+            height: 30px;
+            border-radius: 8px;
+            background: #eef2ff;
+            color: #4f46e5;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .agent-step.done .agent-step-icon {
+            background: #e7f7f0;
+            color: #0d8c6d;
+        }
+
+        .agent-step-label {
+            font-weight: 600;
+            font-size: 14px;
+            color: #1f2937;
+        }
+
+        .agent-step-status {
+            margin-left: auto;
+            font-size: 12px;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            color: #6b7280;
+        }
+
+        .agent-step.done .agent-step-status {
+            color: #16a34a;
+        }
+
+        .spinner {
+            width: 14px;
+            height: 14px;
+            border: 2px solid #c7d2fe;
+            border-top-color: #4f46e5;
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .agent-step-body {
+            padding: 0 14px;
+            max-height: 0;
+            overflow: hidden;
+            font-size: 14px;
+            line-height: 1.6;
+            color: #2b2f36;
+            border-top: 1px solid transparent;
+            transition: max-height 0.4s ease, padding 0.4s ease;
+        }
+
+        .agent-step.reveal .agent-step-body {
+            max-height: 2800px;
+            padding: 12px 14px;
+            border-top: 1px solid #eef0f6;
+        }
+
+        /* ---- Step infographics (macro bar / calendar) ---- */
+        .viz { margin: 2px 0 12px; }
+        .viz-kcal { font-weight: 700; font-size: 14px; color: #0d8c6d; margin-bottom: 8px; }
+        .macro-bar {
+            display: flex; height: 16px; border-radius: 999px; overflow: hidden;
+            background: #eef0f6;
+        }
+        .macro-seg { height: 100%; }
+        .macro-legend { display: flex; gap: 14px; margin-top: 8px; font-size: 12px; color: #4b5563; }
+        .macro-leg { display: inline-flex; align-items: center; gap: 5px; }
+        .macro-leg .dot, .cal-legend .dot {
+            width: 9px; height: 9px; border-radius: 999px; display: inline-block;
+        }
+
+        .viz-title { font-weight: 700; font-size: 14px; color: #1f2937; margin-bottom: 10px; }
+        .macro-extra { color: #4b5563; }
+
+        .info-grid {
+            display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;
+        }
+        .info-card {
+            display: flex; align-items: flex-start; gap: 10px;
+            background: #ffffff; border: 1px solid #ececf1; border-radius: 12px;
+            padding: 11px 12px;
+        }
+        .summary-card { background: #f7fbf9; border-color: #d9efe6; }
+        .info-emoji {
+            font-size: 20px; line-height: 1; flex-shrink: 0;
+            width: 34px; height: 34px; border-radius: 9px; background: #f3f4f6;
+            display: inline-flex; align-items: center; justify-content: center;
+        }
+        .summary-card .info-emoji { background: #e7f7f0; }
+        .info-title { font-weight: 700; font-size: 13px; color: #202123; margin-bottom: 2px; }
+        .info-body { font-size: 13px; color: #4b5563; line-height: 1.45; }
+
+        .grocery-weeks {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px;
+        }
+        .grocery-week {
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 12px;
+            background: #fbfcfe;
+        }
+        .grocery-week-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            margin-bottom: 9px;
+        }
+        .grocery-week-title { font-size: 14px; font-weight: 800; color: #1f2937; }
+        .grocery-budget {
+            font-size: 12px;
+            font-weight: 700;
+            color: #0d8c6d;
+            background: #e7f7f0;
+            border-radius: 999px;
+            padding: 4px 8px;
+            white-space: nowrap;
+        }
+        .grocery-list { display: flex; flex-direction: column; gap: 7px; }
+        .grocery-row {
+            display: grid;
+            grid-template-columns: 23px 62px 1fr;
+            gap: 6px;
+            align-items: start;
+            font-size: 12px;
+            line-height: 1.45;
+            color: #4b5563;
+        }
+        .grocery-row strong { color: #374151; }
+        .grocery-total {
+            margin-top: 10px;
+            padding: 10px 12px;
+            border-radius: 10px;
+            background: #eff6ff;
+            border: 1px solid #dbeafe;
+            color: #1d4ed8;
+            font-size: 13px;
+            font-weight: 700;
+        }
+        .grocery-note {
+            margin-top: 6px;
+            color: #6b7280;
+            font-size: 11px;
+            line-height: 1.45;
+        }
+
+        .revision-box {
+            margin: 0 0 10px;
+            padding: 10px 12px;
+            border-radius: 10px;
+            background: #ecfdf5;
+            border: 1px solid #a7f3d0;
+            border-left: 4px solid #10b981;
+            color: #065f46;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+        .revision-list { margin: 5px 0 0; padding-left: 18px; }
+
+        .safety-box {
+            display: flex; gap: 10px; align-items: flex-start;
+            margin-top: 12px; padding: 12px 14px;
+            background: #fef2f2; border: 1px solid #fecaca; border-left: 4px solid #ef4444;
+            border-radius: 10px; font-size: 13px; line-height: 1.55; color: #b91c1c;
+        }
+        .safety-icon { font-size: 16px; flex-shrink: 0; }
+
+        .sleep-clock {
+            display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+            background: #f5f3ff; border: 1px solid #e6e2ff; border-radius: 12px;
+            padding: 14px 16px; margin-bottom: 10px;
+        }
+        .sleep-time { display: flex; flex-direction: column; align-items: center; }
+        .st-label { font-size: 12px; color: #6b7280; }
+        .st-val { font-size: 22px; font-weight: 800; color: #4f46e5; letter-spacing: 0.5px; }
+        .sleep-arrow { font-size: 20px; color: #a5b4fc; }
+        .sleep-dur { margin-left: auto; font-size: 13px; color: #6366f1; font-weight: 600; }
+        .sleep-tips { margin: 0; padding-left: 18px; font-size: 13px; color: #4b5563; line-height: 1.7; }
+
+        .cal-summary {
+            display: flex; align-items: center; gap: 7px;
+            font-size: 13px; color: #374151; margin-bottom: 8px;
+        }
+        .cal-summary span { display: inline-flex; color: #0d8c6d; }
+
+        .cal-grid {
+            display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px;
+        }
+        .cal-cell {
+            border-radius: 8px; padding: 7px 4px; text-align: center;
+            background: #f3f4f6; position: relative; min-height: 46px;
+        }
+        .cal-cell.d-strength { background: #e7f7f0; }
+        .cal-cell.d-cardio { background: #eef2ff; }
+        .cal-cell.d-mobility { background: #f5f3ff; }
+        .cal-cell.d-rest { background: #f3f4f6; color: #9ca3af; }
+        .cal-day { display: block; font-weight: 700; font-size: 13px; color: #374151; }
+        .cal-cell.d-rest .cal-day { color: #9ca3af; }
+        .cal-kind { display: block; font-size: 11px; margin-top: 2px; color: #4b5563; }
+        .cal-tag {
+            display: block; font-size: 10px; margin-top: 2px; color: #b45309; font-weight: 600;
+        }
+        .cal-legend { display: flex; gap: 14px; margin-top: 10px; font-size: 12px; color: #4b5563; }
+        .cal-legend span { display: inline-flex; align-items: center; gap: 5px; }
+        .cal-legend .dot.d-strength { background: #34d399; }
+        .cal-legend .dot.d-cardio { background: #818cf8; }
+        .cal-legend .dot.d-mobility { background: #a78bfa; }
+        .cal-legend .dot.d-rest { background: #d1d5db; }
+
+        .approval-prompt {
+            margin: 8px 0 2px;
+            padding: 12px 14px;
+            background: #fff7ed;
+            border: 1px solid #fed7aa;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 600;
+            color: #9a3412;
+        }
+
+        .intake-icon {
+            display: inline-flex;
+            vertical-align: -3px;
+            margin-right: 7px;
+            color: #10a37f;
+        }
+
+        .cond-badge {
+            display: none;
+            font-size: 12px;
+            font-weight: 700;
+            padding: 4px 10px;
+            border-radius: 999px;
+            margin-left: 4px;
+        }
+
+        .cond-badge.show { display: inline-flex; align-items: center; }
+        .cond-badge.control { background: #e7f7f0; color: #0d8c6d; border: 1px solid #b6e6d4; }
+        .cond-badge.auto { background: #eef2ff; color: #4f46e5; border: 1px solid #d6dcff; }
+
+        /* ---- Day / time availability widget ---- */
+        .day-time-widget {
+            margin-top: 10px;
+            border: 1px solid #e5e7eb;
+            border-radius: 14px;
+            padding: 6px 4px;
+            background: #fff;
+        }
+
+        .dt-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 7px 10px;
+            border-top: 1px solid #f1f2f4;
+        }
+
+        .dt-row:first-child { border-top: none; }
+
+        .dt-day {
+            width: 34px;
+            height: 34px;
+            border-radius: 999px;
+            border: 1px solid #e5e7eb;
+            background: #f9fafb;
+            font-weight: 700;
+            font-size: 14px;
+            color: #6b7280;
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+
+        .dt-day.active {
+            background: #10a37f;
+            border-color: #0d8c6d;
+            color: #fff;
+        }
+
+        .dt-slots {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+
+        .dt-slot {
+            padding: 7px 12px;
+            border-radius: 999px;
+            border: 1px solid #e5e7eb;
+            background: #fff;
+            font-size: 13px;
+            color: #9ca3af;
+            cursor: pointer;
+        }
+
+        .dt-row.active .dt-slot { color: #374151; }
+
+        .dt-slot.active {
+            background: #eef8f5;
+            border-color: #10a37f;
+            color: #0d8c6d;
+            font-weight: 600;
+        }
+
+        .dt-actions {
+            display: flex;
+            justify-content: flex-end;
+            padding: 10px;
+        }
+
+        .dt-submit {
+            padding: 9px 16px;
+            background: #10a37f;
+            color: #fff;
+            border: 1px solid #0d8c6d;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .dt-submit:hover { background: #0d8c6d; color: #fff; }
+        .dt-hint { padding: 0 12px 6px; font-size: 12px; color: #8e8ea0; }
+
+        /* ---- Height / weight widget ---- */
+        .body-widget {
+            margin-top: 10px;
+            border: 1px solid #e5e7eb;
+            border-radius: 14px;
+            padding: 14px;
+            background: #fff;
+        }
+
+        .bw-fields { display: flex; gap: 12px; flex-wrap: wrap; }
+
+        .bw-field {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: #f7f7f8;
+            border: 1px solid #d1d5db;
+            border-radius: 10px;
+            padding: 8px 12px;
+            font-size: 14px;
+            color: #374151;
+            flex: 1;
+            min-width: 150px;
+        }
+
+        .bw-field input {
+            flex: 1;
+            border: none;
+            background: transparent;
+            outline: none;
+            font-size: 15px;
+            width: 60px;
+            color: #202123;
+        }
+
+        .bw-unit { color: #8e8ea0; font-size: 13px; }
+
+        .bw-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+
+        .bw-skip {
+            background: #fff; color: #374151; border: 1px solid #d1d5db;
+            border-radius: 8px; padding: 9px 14px; font-size: 13px; font-weight: 600;
+        }
+        .bw-skip:hover { background: #f7f7f8; }
+
+        .bw-submit {
+            background: #10a37f; color: #fff; border: 1px solid #0d8c6d;
+            border-radius: 8px; padding: 9px 16px; font-size: 13px; font-weight: 600;
+        }
+        .bw-submit:hover { background: #0d8c6d; color: #fff; }
+
+        @media (max-width: 640px) {
+            .grocery-weeks { grid-template-columns: 1fr; }
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
             <div class="header-left">
-                <h1>AI 다이어트 플래너 에이전트</h1>
+                <span class="brand-logo" aria-label="AI Diet Planner logo">
+                    <svg width="34" height="34" viewBox="0 0 32 32" role="img" aria-hidden="true">
+                        <defs>
+                            <linearGradient id="dpg" x1="0" y1="0" x2="1" y2="1">
+                                <stop offset="0" stop-color="#13b88c"/>
+                                <stop offset="1" stop-color="#0c7a5e"/>
+                            </linearGradient>
+                        </defs>
+                        <rect width="32" height="32" rx="9" fill="url(#dpg)"/>
+                        <path d="M16 6.5c4.6 1.2 7 4.7 7 9 0 4.6-3 8-7 10-4-2-7-5.4-7-10 0-4.3 2.4-7.8 7-9z" fill="#ffffff" opacity="0.95"/>
+                        <path d="M11 16.4h2.1l1.3-2.7 1.9 5 1.3-2.5H21" fill="none" stroke="#0c7a5e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    <span class="brand-name">AI Wellness Agent</span>
+                </span>
+                <span id="condBadge" class="cond-badge"></span>
             </div>
             <button class="btn-reset" onclick="resetChat()">New Chat</button>
         </div>
@@ -414,10 +891,14 @@
                 <div class="message-content">
                     <div class="scenario-box">
                         <div class="scenario-title">시나리오 (실험 참가자 전용)</div>
-                        당신은 2주 뒤 5kg 감량을 목표로 다이어트를 하고 있습니다.
-                        당신의 AI 에이전트는 목표 체중을 위해 운동과 식단 계획을 대신 짜줍니다.
-                        AI 에이전트와 대화하면서 2주의 식단과 운동 및 일상을 계획해 주세요.<br><br>
-                        아래 입력창에 목표나 다이어트 계획 요청을 입력하며 시작하세요.
+                        당신은 앞으로 2주간 더 건강한 생활 루틴을 만들고 싶어 합니다.
+                        당신의 AI 웰니스 에이전트는 식단·운동·수면과 일상 습관을 포함한 2주 루틴을 대신 설계해 줍니다.
+                        체중 감량 같은 특정 목표가 있다면 선택적으로 반영할 수 있습니다.
+                        AI 에이전트와 대화하면서 2주간의 건강 루틴을 함께 계획해 주세요.
+                        <div class="scenario-start">
+                            <button type="button" class="start-btn" onclick="startPlanning()">AI 에이전트와 루틴 설계 시작하기</button>
+                        </div>
+                        <div class="build-tag" id="buildTag"></div>
                     </div>
                 </div>
             </div>
@@ -428,7 +909,7 @@
             <div class="loading" id="loading">Thinking...</div>
             
             <div class="input-group" id="queryInput">
-                <input type="text" id="userInput" placeholder="예: 2주 뒤 5kg 감량 목표예요. 식단과 운동 계획 짜줘" />
+                <input type="text" id="userInput" placeholder="메시지를 입력하세요..." />
                 <button onclick="sendMessage()" class="send-btn" title="전송" id="sendBtn">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <line x1="22" y1="2" x2="11" y2="13"></line>
@@ -440,16 +921,243 @@
     </div>
     
     <script>
+        // Bump this whenever the UI changes so we can confirm the running build.
+        const BUILD = 'wellness-build-16 · full-plan-edit-application';
+        const EXPECTED_SERVER_BUILD = 'wellness-build-16';
+        console.log('[study] UI ' + BUILD);
+        window.addEventListener('DOMContentLoaded', () => {
+            const t = document.getElementById('buildTag');
+            if (t) t.textContent = 'UI ' + BUILD;
+            hideChatInput();
+        });
+
+        // Confirm the BACKEND is also up to date; a stale server (old Python on the
+        // port) is the usual reason new question flows don't appear.
+        function showServerBuild(serverBuild) {
+            if (!serverBuild) return;
+            console.log('[study] server build =', serverBuild);
+            const t = document.getElementById('buildTag');
+            const stale = serverBuild !== EXPECTED_SERVER_BUILD;
+            if (t) {
+                t.textContent = `UI ${BUILD}  |  server ${serverBuild}`;
+                t.style.color = stale ? '#c0392b' : '#9aa6a0';
+            }
+            if (stale) {
+                console.warn('[study] ⚠️ 서버가 옛 코드입니다. 포트 5000의 옛 서버를 종료하고 다시 시작하세요.');
+                showError('⚠️ 서버가 옛 코드(' + serverBuild + ')입니다. 서버를 재시작해야 최신 동작이 적용됩니다.');
+            }
+        }
+
         let conversationId = null;
 
         // Experimental condition can be set via ?group=control or ?group=auto.
         const urlParams = new URLSearchParams(window.location.search);
         const assignedGroup = urlParams.get('group') || '';
+        const debugMode = urlParams.get('debug') === '1';
+
+        // Show which experimental condition is active (helpful while testing).
+        // Visible by default in ?debug=1, and always logged to the console.
+        function showCondition(condition) {
+            if (!condition) return;
+            console.log('[study] assigned condition =', condition,
+                condition === 'control' ? '(user-control: 단계별 승인 O)' : '(autonomous: 승인 X)');
+            const badge = document.getElementById('condBadge');
+            if (!badge || !debugMode) return;
+            badge.classList.remove('control', 'auto');
+            badge.classList.add('show', condition);
+            badge.textContent = condition === 'control' ? '통제 O (control)' : '통제 X (auto)';
+        }
 
         function escapeHtml(text) {
             const div = document.createElement('div');
             div.textContent = text == null ? '' : String(text);
             return div.innerHTML;
+        }
+
+        const delay = (ms) => new Promise(r => setTimeout(r, ms));
+
+        // The chat input is hidden by default and only revealed when the user picks
+        // a free-text option ('기타 (직접 입력)' / '이 항목 수정' 등).
+        function showChatInput(placeholder) {
+            const g = document.getElementById('queryInput');
+            if (g) g.classList.remove('hidden');
+            const i = document.getElementById('userInput');
+            if (i) {
+                if (placeholder) i.placeholder = placeholder;
+                i.focus();
+            }
+        }
+        function hideChatInput() {
+            const g = document.getElementById('queryInput');
+            if (g) g.classList.add('hidden');
+        }
+
+        // Inline SVG icons for each simulated agent tool.
+        function iconSvg(name) {
+            const P = 'fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"';
+            const icons = {
+                calc: `<rect x="5" y="3" width="14" height="18" rx="2" ${P}/><line x1="9" y1="7" x2="15" y2="7" ${P}/><line x1="9" y1="11" x2="9" y2="11" ${P}/><line x1="12" y1="11" x2="12" y2="11" ${P}/><line x1="15" y1="11" x2="15" y2="11" ${P}/><line x1="9" y1="15" x2="9" y2="15" ${P}/><line x1="12" y1="15" x2="12" y2="15" ${P}/>`,
+                meal: `<path d="M6 3v8a2 2 0 0 0 4 0V3M8 3v18" ${P}/><path d="M16 3c-1.5 0-2.5 2-2.5 5s1 4 2.5 4 2.5-1 2.5-4-1-5-2.5-5zM16 12v9" ${P}/>`,
+                workout: `<path d="M6.5 8v8M17.5 8v8M3.5 10v4M20.5 10v4M6.5 12h11" ${P}/>`,
+                calendar: `<rect x="4" y="5" width="16" height="16" rx="2" ${P}/><line x1="4" y1="9" x2="20" y2="9" ${P}/><line x1="8" y1="3" x2="8" y2="6" ${P}/><line x1="16" y1="3" x2="16" y2="6" ${P}/>`,
+                grocery: `<circle cx="9" cy="20" r="1.3" ${P}/><circle cx="17" cy="20" r="1.3" ${P}/><path d="M3 4h2l2.2 11.2a1.5 1.5 0 0 0 1.5 1.2h8.1a1.5 1.5 0 0 0 1.5-1.2L21 8H6" ${P}/>`,
+                plan: `<path d="M9 4h6a1 1 0 0 1 1 1v0a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1v0a1 1 0 0 1 1-1z" ${P}/><path d="M8 5H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2" ${P}/><path d="M8.5 13l2 2 4-4" ${P}/>`,
+                sleep: `<path d="M20 14.5A8 8 0 1 1 9.5 4 6.2 6.2 0 0 0 20 14.5z" ${P}/>`,
+                goal: `<circle cx="12" cy="12" r="8" ${P}/><circle cx="12" cy="12" r="4" ${P}/><circle cx="12" cy="12" r="0.6" ${P}/>`,
+                body: `<circle cx="12" cy="6.5" r="2.6" ${P}/><path d="M6.5 21v-2a5.5 5.5 0 0 1 11 0v2" ${P}/>`,
+            };
+            return `<svg width="17" height="17" viewBox="0 0 24 24" aria-hidden="true">${icons[name] || icons.plan}</svg>`;
+        }
+
+        const CHECK_SVG = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+
+        // Reveal one tool step: spinner ("실행 중") -> check ("완료") -> body fades in.
+        // Render a step's structured visual (macro bar / 2-week calendar) as an infographic.
+        function renderStepVisual(visual) {
+            if (!visual) return '';
+            const revision = visual.revision
+                ? `<div class="revision-box"><b>수정 반영 완료</b><br>${escapeHtml(visual.revision)}</div>`
+                : '';
+            const revisions = Array.isArray(visual.revisions) && visual.revisions.length
+                ? `<div class="revision-box"><b>최종 루틴에 반영된 수정사항</b><ul class="revision-list">${
+                    visual.revisions.map(item => `<li>${escapeHtml(item)}</li>`).join('')
+                }</ul></div>`
+                : '';
+            if (visual.type === 'macros') {
+                const colors = ['#10a37f', '#6366f1', '#f59e0b'];
+                const segs = (visual.items || []).map((it, i) =>
+                    `<div class="macro-seg" style="width:${it.pct}%;background:${colors[i % 3]}"></div>`).join('');
+                const legend = (visual.items || []).map((it, i) =>
+                    `<span class="macro-leg"><span class="dot" style="background:${colors[i % 3]}"></span>${escapeHtml(it.label)} ${it.pct}%</span>`).join('');
+                const extras = (visual.extras || []).map(e =>
+                    `<span class="macro-extra">${escapeHtml(e.label)} ${escapeHtml(e.value)}</span>`).join('');
+                return `
+                    <div class="viz">
+                        ${revision}
+                        <div class="viz-kcal">하루 약 ${visual.kcal.toLocaleString()} kcal</div>
+                        <div class="macro-bar">${segs}</div>
+                        <div class="macro-legend">${legend}${extras}</div>
+                    </div>`;
+            }
+            if (visual.type === 'cards' || visual.type === 'summary') {
+                const cls = visual.type === 'summary' ? 'info-card summary-card' : 'info-card';
+                const cards = (visual.cards || []).map(cd => `
+                    <div class="${cls}">
+                        <div class="info-emoji">${escapeHtml(cd.emoji || '•')}</div>
+                        <div class="info-text">
+                            <div class="info-title">${escapeHtml(cd.title || '')}</div>
+                            <div class="info-body">${escapeHtml(cd.body || '')}</div>
+                        </div>
+                    </div>`).join('');
+                return `
+                    <div class="viz">
+                        ${revision}${revisions}
+                        ${visual.title ? `<div class="viz-title">${escapeHtml(visual.title)}</div>` : ''}
+                        <div class="info-grid">${cards}</div>
+                        ${visual.safety ? `<div class="safety-box"><span class="safety-icon">⚠️</span><span><b>안전 안내</b><br>${escapeHtml(visual.safety)}</span></div>` : ''}
+                    </div>`;
+            }
+            if (visual.type === 'grocery') {
+                const weeks = (visual.weeks || []).map(week => `
+                    <section class="grocery-week">
+                        <div class="grocery-week-head">
+                            <span class="grocery-week-title">${escapeHtml(week.label || '')}</span>
+                            <span class="grocery-budget">${escapeHtml(week.budget || '')}</span>
+                        </div>
+                        <div class="grocery-list">
+                            ${(week.cards || []).map(card => `
+                                <div class="grocery-row">
+                                    <span>${escapeHtml(card.emoji || '•')}</span>
+                                    <strong>${escapeHtml(card.title || '')}</strong>
+                                    <span>${escapeHtml(card.body || '')}</span>
+                                </div>`).join('')}
+                        </div>
+                    </section>`).join('');
+                return `
+                    <div class="viz">
+                        ${revision}
+                        ${visual.title ? `<div class="viz-title">${escapeHtml(visual.title)}</div>` : ''}
+                        <div class="grocery-weeks">${weeks}</div>
+                        ${visual.total_budget ? `<div class="grocery-total">${escapeHtml(visual.total_budget)}</div>` : ''}
+                        ${visual.budget_note ? `<div class="grocery-note">${escapeHtml(visual.budget_note)}</div>` : ''}
+                    </div>`;
+            }
+            if (visual.type === 'sleep') {
+                const tips = (visual.tips || []).map(t => `<li>${escapeHtml(t)}</li>`).join('');
+                return `
+                    <div class="viz">
+                        ${revision}
+                        <div class="sleep-clock">
+                            <div class="sleep-time"><span class="st-label">취침</span><span class="st-val">${escapeHtml(visual.bedtime)}</span></div>
+                            <div class="sleep-arrow">→</div>
+                            <div class="sleep-time"><span class="st-label">기상</span><span class="st-val">${escapeHtml(visual.waketime)}</span></div>
+                            <div class="sleep-dur">${escapeHtml(visual.duration || '')}</div>
+                        </div>
+                        <ul class="sleep-tips">${tips}</ul>
+                    </div>`;
+            }
+            if (visual.type === 'calendar') {
+                const kindClass = {
+                    rest: 'd-rest', strength: 'd-strength',
+                    cardio: 'd-cardio', mobility: 'd-mobility'
+                };
+                const kindLabel = {
+                    rest: '휴식', strength: '근력',
+                    cardio: '유산소', mobility: '요가·스트레칭'
+                };
+                const cells = (visual.days || []).map(d => `
+                    <div class="cal-cell ${kindClass[d.kind] || ''}">
+                        <span class="cal-day">${d.day}</span>
+                        <span class="cal-kind">${escapeHtml(d.label || kindLabel[d.kind] || '')}</span>
+                        ${d.tag ? `<span class="cal-tag">점검</span>` : ''}
+                    </div>`).join('');
+                const summary = [];
+                if (visual.sleep_summary) summary.push(`<div class="cal-summary"><span>${iconSvg('sleep')}</span>${escapeHtml(visual.sleep_summary)}</div>`);
+                if (visual.diet_summary) summary.push(`<div class="cal-summary"><span>${iconSvg('meal')}</span>${escapeHtml(visual.diet_summary)}</div>`);
+                return `
+                    <div class="viz">
+                        ${revision}
+                        ${summary.join('')}
+                        <div class="cal-grid">${cells}</div>
+                        <div class="cal-legend">
+                            <span><span class="dot d-strength"></span>근력</span>
+                            <span><span class="dot d-cardio"></span>유산소</span>
+                            <span><span class="dot d-mobility"></span>요가·스트레칭</span>
+                            <span><span class="dot d-rest"></span>휴식</span>
+                        </div>
+                    </div>`;
+            }
+            return '';
+        }
+
+        async function animateStep(container, step) {
+            const card = document.createElement('div');
+            card.className = 'agent-step';
+            const bodyInner = renderStepVisual(step.visual) +
+                convertLinksToClickable(escapeHtml(step.content || '').replace(/\n/g, '<br>'));
+            card.innerHTML = `
+                <div class="agent-step-head">
+                    <span class="agent-step-icon">${iconSvg(step.icon)}</span>
+                    <span class="agent-step-label">${escapeHtml(step.label || '도구')}</span>
+                    <span class="agent-step-status"><span class="spinner"></span>실행 중...</span>
+                </div>
+                <div class="agent-step-body">${bodyInner}</div>
+            `;
+            container.appendChild(card);
+            scrollToBottom();
+            requestAnimationFrame(() => card.classList.add('show'));
+            await delay(850);
+            card.classList.add('done');
+            card.querySelector('.agent-step-status').innerHTML = `${CHECK_SVG} 완료`;
+            await delay(120);
+            card.classList.add('reveal');
+            scrollToBottom();
+            await delay(420);
+        }
+
+        function scrollToBottom() {
+            const chatArea = document.getElementById('chatArea');
+            chatArea.scrollTop = chatArea.scrollHeight;
         }
 
         function renderAgentActions(actions) {
@@ -483,7 +1191,26 @@
             });
         }
 
-        function renderChoices(container, choices) {
+        // When the user picks '이 항목 수정', offer phase-specific quick-edit options;
+        // each opens the input with a tailored example placeholder.
+        function renderModifyMenu(container, options) {
+            const panel = document.createElement('div');
+            panel.className = 'choice-panel modify-menu';
+            options.forEach(opt => {
+                const b = document.createElement('button');
+                b.type = 'button';
+                b.className = 'choice-item';
+                b.innerHTML = `<span class="choice-index">✏️</span><span class="choice-label">${escapeHtml(opt.label)}</span>`;
+                b.addEventListener('click', () => {
+                    if (b.disabled) return;
+                    showChatInput(opt.placeholder || '바꾸고 싶은 내용을 입력하세요');
+                });
+                panel.appendChild(b);
+            });
+            container.appendChild(panel);
+        }
+
+        function renderChoices(container, choices, modifyOptions) {
             if (!Array.isArray(choices) || choices.length === 0) {
                 return;
             }
@@ -522,8 +1249,11 @@
 
                     const value = (choice.value || '').trim();
                     if (!value) {
-                        const input = document.getElementById('userInput');
-                        input.focus();
+                        if (choice.id === 'modify' && Array.isArray(modifyOptions) && modifyOptions.length) {
+                            renderModifyMenu(container, modifyOptions);
+                        } else {
+                            showChatInput();
+                        }
                         return;
                     }
 
@@ -571,13 +1301,234 @@
 
             const hasCustomInput = hasCustomInputChoice;
             if (hasCustomInput) {
+                const customChoice = choices.find(c => !((c.value || '').trim()));
+                const customLabel = (customChoice && customChoice.label) ? customChoice.label : '기타';
                 const hint = document.createElement('div');
                 hint.className = 'choice-input-hint';
                 hint.textContent = isMultiSelect
                     ? '번호 옵션은 여러 개 선택 후 선택 완료를 눌러주세요. 기타는 직접 입력할 수 있어요.'
-                    : '기타를 선택하면 직접 입력할 수 있어요.';
+                    : `'${customLabel}'을(를) 누르면 직접 입력할 수 있어요. 궁금한 점을 물어보셔도 돼요.`;
                 container.appendChild(hint);
             }
+        }
+
+        // Interactive day x time-slot availability picker.
+        function renderDayTimeWidget(container, widget) {
+            const days = widget.days || ['월', '화', '수', '목', '금', '토', '일'];
+            const slots = widget.slots || ['오전', '오후', '저녁'];
+            const selected = {}; // day -> Set(slots)
+
+            const panel = document.createElement('div');
+            panel.className = 'day-time-widget';
+
+            days.forEach(day => {
+                const row = document.createElement('div');
+                row.className = 'dt-row';
+
+                const dayBtn = document.createElement('button');
+                dayBtn.type = 'button';
+                dayBtn.className = 'dt-day';
+                dayBtn.textContent = day;
+
+                const slotsWrap = document.createElement('div');
+                slotsWrap.className = 'dt-slots';
+
+                const syncDay = () => {
+                    const has = selected[day] && selected[day].size > 0;
+                    dayBtn.classList.toggle('active', !!has);
+                    row.classList.toggle('active', !!has);
+                };
+
+                slots.forEach(slot => {
+                    const sBtn = document.createElement('button');
+                    sBtn.type = 'button';
+                    sBtn.className = 'dt-slot';
+                    sBtn.textContent = slot;
+                    sBtn.addEventListener('click', () => {
+                        if (sBtn.disabled) return;
+                        if (!selected[day]) selected[day] = new Set();
+                        if (selected[day].has(slot)) {
+                            selected[day].delete(slot);
+                            sBtn.classList.remove('active');
+                        } else {
+                            selected[day].add(slot);
+                            sBtn.classList.add('active');
+                        }
+                        syncDay();
+                    });
+                    slotsWrap.appendChild(sBtn);
+                });
+
+                // Tapping the day toggles all slots on/off quickly.
+                dayBtn.addEventListener('click', () => {
+                    const has = selected[day] && selected[day].size > 0;
+                    if (has) {
+                        selected[day].clear();
+                        slotsWrap.querySelectorAll('.dt-slot').forEach(b => b.classList.remove('active'));
+                    } else {
+                        selected[day] = new Set(slots);
+                        slotsWrap.querySelectorAll('.dt-slot').forEach(b => b.classList.add('active'));
+                    }
+                    syncDay();
+                });
+
+                row.appendChild(dayBtn);
+                row.appendChild(slotsWrap);
+                panel.appendChild(row);
+            });
+
+            const hint = document.createElement('div');
+            hint.className = 'dt-hint';
+            hint.textContent = '가능한 요일과 각 요일의 시간대를 선택한 뒤 "선택 완료"를 눌러주세요.';
+            panel.appendChild(hint);
+
+            const actions = document.createElement('div');
+            actions.className = 'dt-actions';
+            const submit = document.createElement('button');
+            submit.type = 'button';
+            submit.className = 'dt-submit';
+            submit.textContent = '선택 완료';
+            submit.addEventListener('click', () => {
+                if (submit.disabled) return;
+                const parts = days
+                    .filter(d => selected[d] && selected[d].size > 0)
+                    .map(d => `${d} ${slots.filter(s => selected[d].has(s)).join('·')}`);
+                if (parts.length === 0) {
+                    showError('가능한 요일과 시간대를 하나 이상 선택해주세요');
+                    return;
+                }
+                const input = document.getElementById('userInput');
+                input.value = '운동 가능: ' + parts.join(', ');
+                sendMessage();
+            });
+            actions.appendChild(submit);
+            panel.appendChild(actions);
+
+            container.appendChild(panel);
+        }
+
+        // Height / weight input fields (optional).
+        function renderBodyWidget(container, widget) {
+            const panel = document.createElement('div');
+            panel.className = 'body-widget';
+            panel.innerHTML = `
+                <div class="bw-fields">
+                    <label class="bw-field"><span>키</span><input type="number" id="bwHeight" min="100" max="230" placeholder="예: 170"><span class="bw-unit">cm</span></label>
+                    <label class="bw-field"><span>몸무게</span><input type="number" id="bwWeight" min="30" max="200" placeholder="예: 62"><span class="bw-unit">kg</span></label>
+                </div>
+                <div class="bw-actions">
+                    <button type="button" class="bw-skip">생략하고 진행</button>
+                    <button type="button" class="bw-submit">이 정보로 진행</button>
+                </div>
+            `;
+            panel.querySelector('.bw-skip').addEventListener('click', () => {
+                const input = document.getElementById('userInput');
+                input.value = '키와 몸무게는 생략할게요';
+                sendMessage();
+            });
+            panel.querySelector('.bw-submit').addEventListener('click', () => {
+                const h = (panel.querySelector('#bwHeight').value || '').trim();
+                const w = (panel.querySelector('#bwWeight').value || '').trim();
+                if (!h && !w) {
+                    showError('키 또는 몸무게를 입력하거나 "생략하고 진행"을 눌러주세요');
+                    return;
+                }
+                const parts = [];
+                if (h) parts.push(`키 ${h}cm`);
+                if (w) parts.push(`몸무게 ${w}kg`);
+                const input = document.getElementById('userInput');
+                input.value = parts.join(', ');
+                sendMessage();
+            });
+            container.appendChild(panel);
+        }
+
+        // Bedtime / wake-time inputs.
+        function renderSleepTimeWidget(container, widget) {
+            const panel = document.createElement('div');
+            panel.className = 'body-widget';
+            panel.innerHTML = `
+                <div class="bw-fields">
+                    <label class="bw-field"><span>취침</span><input type="time" id="stBed" value="23:30"></label>
+                    <label class="bw-field"><span>기상</span><input type="time" id="stWake" value="07:00"></label>
+                </div>
+                <div class="bw-actions">
+                    <button type="button" class="bw-skip">잘 모르겠어요</button>
+                    <button type="button" class="bw-submit">이 시간으로 진행</button>
+                </div>
+            `;
+            panel.querySelector('.bw-skip').addEventListener('click', () => {
+                const input = document.getElementById('userInput');
+                input.value = '평소 취침·기상 시간이 일정하지 않아요';
+                sendMessage();
+            });
+            panel.querySelector('.bw-submit').addEventListener('click', () => {
+                const bed = panel.querySelector('#stBed').value;
+                const wake = panel.querySelector('#stWake').value;
+                if (!bed || !wake) { showError('취침·기상 시간을 입력해주세요'); return; }
+                const input = document.getElementById('userInput');
+                input.value = `평소 취침 ${bed}, 기상 ${wake}`;
+                sendMessage();
+            });
+            container.appendChild(panel);
+        }
+
+        // Orchestrate an assistant turn: animate tool steps, then reveal text,
+        // approval prompt, widget, and clickable choices.
+        async function renderAssistant(data) {
+            hideChatInput();
+            const chatArea = document.getElementById('chatArea');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message assistant';
+            chatArea.appendChild(messageDiv);
+
+            const steps = Array.isArray(data.steps) ? data.steps : [];
+            if (steps.length > 0) {
+                const stepsWrap = document.createElement('div');
+                stepsWrap.className = 'agent-steps';
+                messageDiv.appendChild(stepsWrap);
+                for (const step of steps) {
+                    await animateStep(stepsWrap, step);
+                }
+            } else if (Array.isArray(data.agent_actions) && data.agent_actions.length) {
+                messageDiv.insertAdjacentHTML('beforeend', renderAgentActions(data.agent_actions));
+            }
+
+            const text = (data.response || '').trim();
+            if (text) {
+                const contentDiv = document.createElement('div');
+                contentDiv.className = 'message-content';
+                let inner = convertLinksToClickable(escapeHtml(text).replace(/\n/g, '<br>'));
+                // Intake questions get a small leading icon for a more visual feel.
+                if (data.intake_icon) {
+                    inner = `<span class="intake-icon">${iconSvg(data.intake_icon)}</span>` + inner;
+                }
+                contentDiv.innerHTML = inner;
+                messageDiv.appendChild(contentDiv);
+            }
+
+            if (data.approval_prompt) {
+                const ap = document.createElement('div');
+                ap.className = 'approval-prompt';
+                ap.textContent = data.approval_prompt;
+                messageDiv.appendChild(ap);
+            }
+
+            if (data.widget && data.widget.type === 'day_time') {
+                renderDayTimeWidget(messageDiv, data.widget);
+            } else if (data.widget && data.widget.type === 'body_metrics') {
+                renderBodyWidget(messageDiv, data.widget);
+            } else if (data.widget && data.widget.type === 'sleep_time') {
+                renderSleepTimeWidget(messageDiv, data.widget);
+            }
+
+            renderChoices(messageDiv, getRenderableChoices(data), data.modify_options);
+
+            // Only explicitly requested free-text actions reveal the input.
+            if (data.show_input) {
+                showChatInput(data.input_placeholder || '');
+            }
+            scrollToBottom();
         }
 
         function addMessage(role, content, isSystem = false, choices = [], agentActions = []) {
@@ -684,16 +1635,26 @@
                 if (!conversationId) {
                     conversationId = data.conversation_id;
                 }
-                
-                addMessage('assistant', data.response, false, getRenderableChoices(data), data.agent_actions || []);
+                if (data.condition) {
+                    showCondition(data.condition);
+                }
+                showServerBuild(data.server_build);
+
                 setLoading(false);
-                
+                await renderAssistant(data);
+
             } catch (error) {
                 showError('Error: ' + error.message);
                 setLoading(false);
             }
         }
         
+        function startPlanning() {
+            const input = document.getElementById('userInput');
+            input.value = '앞으로 2주간 더 건강한 생활 루틴을 만들고 싶어요. 식단·운동·수면 계획을 짜줘';
+            sendMessage();
+        }
+
         async function resetChat() {
             try {
                 await fetch('/api/reset', { method: 'POST' });
