@@ -1,3 +1,4 @@
+import re
 from typing import Dict, Any, List, Optional
 from database.db_manager import DBManager
 
@@ -402,7 +403,13 @@ class WorkflowManager:
         is_control = (condition == 'control')
         controls = is_control and not is_last
         has_diet = 'meal' in self._pipeline(conversation_id)
-        steps = [self._step_card(phase, response, visual=self._step_visual(conversation_id, phase, has_diet))]
+        steps = [self._step_card(
+            phase,
+            response,
+            visual=self._step_visual(
+                conversation_id, phase, has_diet, revision=override_instruction
+            ),
+        )]
         approval_prompt = meta['approve'] if (is_control and not is_last) else None
         modify_options = self._modify_options(phase) if (is_control and not is_last) else None
         # The step card carries the content; keep the message body empty to avoid
@@ -460,7 +467,8 @@ class WorkflowManager:
 
         # The autonomous run reveals every step (animated) but never pauses.
         return self._result(closing, 'delivered', condition, 'high',
-                            agent_actions=actions, controls=False, steps=steps)
+                            agent_actions=actions, controls=False, steps=steps,
+                            post_plan=(condition == 'control'))
 
     # ------------------------------------------------------------------ #
     # Control-group interaction handlers
@@ -601,7 +609,8 @@ class WorkflowManager:
         response = self.gpt_service.generate_agent_response(
             condition=condition, phase='override', user_message=user_message,
             conversation_history=history, autonomy_level=autonomy,
-            override_instruction=user_message
+            override_instruction=user_message,
+            profile=self._user_profile(conversation_id)
         )
         self.db_manager.add_message(conversation_id, 'assistant', response)
         self.db_manager.add_workflow_state(
@@ -609,9 +618,17 @@ class WorkflowManager:
             user_input=user_message, gpt_response=response,
             tool_name='plan_compiler', intervention_type='override', autonomy_level=autonomy
         )
-        return self._result(response, 'delivered', condition, autonomy,
+        has_diet = 'meal' in self._pipeline(conversation_id)
+        steps = [self._step_card(
+            'delivery',
+            response,
+            visual=self._step_visual(
+                conversation_id, 'delivery', has_diet, revision=user_message
+            ),
+        )]
+        return self._result('', 'delivered', condition, autonomy,
                             agent_actions=[self._action_card('delivery', label='계획 수정')],
-                            controls=True, post_plan=True)
+                            controls=True, post_plan=True, steps=steps)
 
     # ------------------------------------------------------------------ #
     # Helpers
@@ -638,6 +655,91 @@ class WorkflowManager:
         # user_msgs[0] is the opening request; the next answers are the intake replies.
         answers = user_msgs[1:1 + self.INTAKE_SPAN]
         return ' / '.join(a for a in answers if a)
+
+    def _exercise_context(self, conversation_id: int) -> Dict[str, Any]:
+        """Extract exercise availability, current level, and preference from intake."""
+        profile = self._user_profile(conversation_id)
+        availability: List[Dict[str, str]] = []
+        match = re.search(r'운동 가능:\s*([^/]+)', profile)
+        if match:
+            for item in match.group(1).split(','):
+                item = item.strip()
+                day_match = re.match(r'([월화수목금토일])(?:요일)?\s*(.*)', item)
+                if day_match:
+                    availability.append({
+                        'day': day_match.group(1),
+                        'time': day_match.group(2).strip() or '가능 시간',
+                    })
+
+        if not availability:
+            availability = [
+                {'day': '월', 'time': '저녁'},
+                {'day': '수', 'time': '저녁'},
+                {'day': '토', 'time': '오전'},
+            ]
+
+        if '거의 안' in profile:
+            level = '운동을 거의 하지 않음'
+            duration = 20
+            max_days = 3
+        elif '주 1~2회' in profile:
+            level = '현재 주 1~2회 운동'
+            duration = 30
+            max_days = 4
+        elif '주 3회 이상' in profile:
+            level = '현재 주 3회 이상 운동'
+            duration = 40
+            max_days = 5
+        elif '가끔' in profile:
+            level = '가끔 운동함'
+            duration = 25
+            max_days = 3
+        else:
+            level = '현재 루틴 정보 없음'
+            duration = 30
+            max_days = 4
+
+        if '요가' in profile or '스트레칭' in profile:
+            preference = '요가·스트레칭'
+        elif '홈트' in profile:
+            preference = '홈트레이닝'
+        elif '근력' in profile:
+            preference = '근력 운동'
+        elif '걷기' in profile or '유산소' in profile:
+            preference = '걷기·유산소'
+        else:
+            preference = '근력과 유산소 병행'
+
+        return {
+            'availability': availability[:max_days],
+            'level': level,
+            'duration': duration,
+            'preference': preference,
+        }
+
+    def _diet_strategy(self, conversation_id: int) -> str:
+        """Return a goal-specific diet description without generic '균형식' wording."""
+        strategies = {
+            'weight': '단백질을 충분히 챙기고 튀김·포화지방을 줄인 감량형 식사',
+            'diet': '채소·통곡물 중심으로 야식과 군것질 빈도를 낮춘 규칙적 식사',
+            'overall': '에너지 유지를 위해 단백질·통곡물·채소를 고르게 챙기는 식사',
+            'sleep': '늦은 야식과 과도한 카페인을 줄여 수면 리듬을 돕는 식사',
+            'habit': '운동 전후 단백질과 수분을 챙겨 회복을 돕는 식사',
+        }
+        return strategies.get(
+            self._goal_key(conversation_id),
+            '가공식품을 줄이고 단백질·채소를 충분히 챙기는 식사',
+        )
+
+    def _revision_requests(self, conversation_id: int) -> List[str]:
+        """Collect user edits so later steps and the final summary show them."""
+        revisions = []
+        for state in self.db_manager.get_workflow_history(conversation_id):
+            if state.get('intervention_type') in ('modify', 'override'):
+                request = (state.get('user_input') or '').strip()
+                if request and request not in revisions:
+                    revisions.append(request)
+        return revisions
 
     # Per-phase quick-edit menu shown when the control group clicks '이 항목 수정'.
     MODIFY_MENUS = {
@@ -685,11 +787,22 @@ class WorkflowManager:
         'diet': '식습관 개선', 'weight': '체중 감량', 'overall': '전반적 컨디션·에너지',
     }
 
-    def _step_visual(self, conversation_id: int, phase: str, has_diet: bool = True) -> Optional[Dict[str, Any]]:
+    def _step_visual(
+        self,
+        conversation_id: int,
+        phase: str,
+        has_diet: bool = True,
+        revision: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
         """Structured data the frontend renders as cards / infographics."""
+        def revised(visual: Dict[str, Any]) -> Dict[str, Any]:
+            if revision:
+                visual['revision'] = revision
+            return visual
+
         if phase == 'calc':
             m = self.MACROS
-            return {
+            return revised({
                 'type': 'macros', 'kcal': m['kcal'],
                 'items': [
                     {'label': '탄수화물', 'pct': m['carb']},
@@ -697,62 +810,125 @@ class WorkflowManager:
                     {'label': '지방', 'pct': m['fat']},
                 ],
                 'extras': [{'label': '수분', 'value': '1.5~2L'}],
-            }
+            })
         if phase == 'meal':
-            return {'type': 'cards', 'title': '하루 식단 예시', 'cards': [
+            return revised({'type': 'cards', 'title': '하루 식단 예시', 'cards': [
                 {'emoji': '🥣', 'title': '아침', 'body': '그릭요거트 + 베리 + 견과'},
                 {'emoji': '🍱', 'title': '점심', 'body': '현미밥 + 닭가슴살(또는 두부) + 샐러드'},
                 {'emoji': '🥗', 'title': '저녁', 'body': '채소볶음 + 미역국 + 잡곡밥'},
                 {'emoji': '🍎', 'title': '간식', 'body': '방울토마토, 삶은 달걀'},
-            ]}
+            ]})
         if phase == 'workout':
-            return {'type': 'cards', 'title': '주간 운동 루틴', 'cards': [
-                {'emoji': '🏋️', 'title': '월·목', 'body': '전신 근력 30분'},
-                {'emoji': '🏃', 'title': '화·금', 'body': '유산소 40분'},
-                {'emoji': '🚶', 'title': '토', 'body': '가벼운 활동(산책·스트레칭)'},
-                {'emoji': '😴', 'title': '수·일', 'body': '휴식'},
-            ]}
+            context = self._exercise_context(conversation_id)
+            exercise_types = [
+                context['preference'],
+                '전신 근력',
+                '빠르게 걷기·가벼운 유산소',
+                '회복 스트레칭',
+                '근력과 유산소 혼합',
+            ]
+            cards = [{
+                'emoji': '📌',
+                'title': '현재 루틴 반영',
+                'body': (
+                    f"{context['level']} · {context['preference']} 선호를 고려해 "
+                    f"{context['duration']}분부터 시작"
+                ),
+            }]
+            for index, slot in enumerate(context['availability']):
+                cards.append({
+                    'emoji': '🏃' if index % 2 else '🏋️',
+                    'title': f"{slot['day']}요일 {slot['time']}",
+                    'body': f"{exercise_types[index % len(exercise_types)]} {context['duration']}분",
+                })
+            return revised({
+                'type': 'cards',
+                'title': '사용자 운동 가능 시간에 맞춘 주간 루틴',
+                'cards': cards,
+            })
         if phase == 'sleep':
-            return {
+            return revised({
                 'type': 'sleep', 'bedtime': '23:30', 'waketime': '07:00', 'duration': '약 7.5시간',
                 'tips': ['취침 1시간 전 스크린 줄이기', '오후 2시 이후 카페인 자제',
                          '기상 후 물 한 잔', '하루 10분 산책으로 스트레스 관리'],
-            }
+            })
         if phase == 'schedule':
+            exercise = self._exercise_context(conversation_id)
+            active_days = {item['day'] for item in exercise['availability']}
+            weekdays = ['월', '화', '수', '목', '금', '토', '일']
             days = []
             for d in range(1, 15):
-                if d % 7 in (3, 0):
+                weekday = weekdays[(d - 1) % 7]
+                if weekday not in active_days:
                     kind = 'rest'
                 else:
                     kind = 'strength' if d % 2 else 'cardio'
                 days.append({'day': d, 'kind': kind,
                              'tag': '컨디션 점검' if d in (1, 8, 14) else ''})
-            return {
+            return revised({
                 'type': 'calendar',
                 'sleep_summary': '매일 취침 23:30 · 기상 07:00 (약 7.5시간)',
-                'diet_summary': (f"매일 약 {self.MACROS['kcal']:,}kcal 균형식 (3끼 + 가벼운 간식)"
+                'diet_summary': (self._diet_strategy(conversation_id)
                                  if has_diet else ''),
                 'days': days,
-            }
+            })
         if phase == 'grocery':
-            return {'type': 'cards', 'title': '1주차 장보기 리스트', 'cards': [
-                {'emoji': '🍗', 'title': '단백질', 'body': '닭가슴살 5팩, 두부 4모, 달걀 1판, 그릭요거트 7개'},
-                {'emoji': '🥦', 'title': '채소', 'body': '샐러드 채소, 브로콜리, 미역, 방울토마토'},
-                {'emoji': '🍚', 'title': '탄수화물', 'body': '현미 1kg, 고구마 7개'},
-                {'emoji': '🥜', 'title': '기타', 'body': '견과류, 올리브유, 베리류'},
-            ]}
+            return revised({
+                'type': 'grocery',
+                'title': '2주 장보기 리스트와 예상 예산',
+                'weeks': [
+                    {
+                        'label': '1주차',
+                        'budget': '약 55,000~65,000원',
+                        'cards': [
+                            {'emoji': '🍗', 'title': '단백질', 'body': '닭가슴살 5팩, 두부 3모, 달걀 10개, 그릭요거트 4개'},
+                            {'emoji': '🥦', 'title': '채소', 'body': '샐러드 채소, 브로콜리, 미역, 방울토마토'},
+                            {'emoji': '🍚', 'title': '탄수화물', 'body': '현미 1kg, 고구마 5개, 통밀빵 1봉'},
+                            {'emoji': '🥜', 'title': '기타', 'body': '견과류, 올리브유, 냉동 베리'},
+                        ],
+                    },
+                    {
+                        'label': '2주차',
+                        'budget': '약 60,000~72,000원',
+                        'cards': [
+                            {'emoji': '🐟', 'title': '단백질', 'body': '연어 2팩, 흰살생선 2팩, 렌틸콩 1봉, 달걀 10개'},
+                            {'emoji': '🥬', 'title': '채소', 'body': '시금치, 파프리카, 양배추, 버섯, 오이'},
+                            {'emoji': '🌾', 'title': '탄수화물', 'body': '오트밀 1봉, 잡곡 1kg, 단호박 1개'},
+                            {'emoji': '🍊', 'title': '기타', 'body': '무가당 두유, 제철 과일, 플레인 요거트'},
+                        ],
+                    },
+                ],
+                'total_budget': '2주 총예산 약 115,000~137,000원',
+                'budget_note': '일반 대형마트 기준의 예상치이며 지역·브랜드·보유 식재료에 따라 달라질 수 있어요.',
+            })
         if phase == 'delivery':
             goal = self.GOAL_LABELS.get(self._goal_key(conversation_id), '건강 루틴')
+            exercise = self._exercise_context(conversation_id)
+            days = '·'.join(item['day'] for item in exercise['availability'])
             cards = [{'emoji': '🎯', 'title': '목표', 'body': goal}]
             if has_diet:
-                cards.append({'emoji': '🍽️', 'title': '식단', 'body': '하루 약 1,900kcal 균형식'})
-            cards.append({'emoji': '💪', 'title': '운동', 'body': '주 5일 (근력+유산소), 수·일 휴식'})
+                cards.append({'emoji': '🍽️', 'title': '식단', 'body': self._diet_strategy(conversation_id)})
+                cards.append({'emoji': '🛒', 'title': '장보기 예산', 'body': '1주차 약 5.5~6.5만원 · 2주차 약 6~7.2만원'})
+            cards.append({
+                'emoji': '💪',
+                'title': '운동',
+                'body': f"{exercise['level']}을 고려해 {days}요일, 회당 약 {exercise['duration']}분",
+            })
             cards.append({'emoji': '😴', 'title': '수면', 'body': '취침 23:30 · 기상 07:00'})
-            return {
+            visual = {
                 'type': 'summary', 'title': '2주 건강 루틴 요약', 'cards': cards,
                 'safety': '무리한 절식·과한 운동은 피하고, 어지럼증 등 이상이 느껴지면 강도를 낮추세요. '
                           '지속 가능한 습관이 가장 중요하며, 지병이 있다면 전문가와 상담하세요.',
             }
+            revisions = self._revision_requests(conversation_id)
+            if revisions:
+                visual['cards'].append({
+                    'emoji': '✏️',
+                    'title': '수정 반영',
+                    'body': ' / '.join(revisions[-2:]),
+                })
+                visual['revisions'] = revisions
+            return visual
         return None
 
     def _classify_intent(self, user_message: str) -> str:

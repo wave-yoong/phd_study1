@@ -13,7 +13,7 @@ from database.db_manager import DBManager
 
 # Backend build marker — surfaced in API responses and /health so a stale server
 # (old Python still bound to the port) is immediately obvious.
-APP_BUILD = 'wellness-build-13'
+APP_BUILD = 'wellness-build-14'
 print(f"[study] backend {APP_BUILD} starting", file=sys.stderr)
 
 # Load environment variables
@@ -128,11 +128,10 @@ def _serialize(result: dict, **extra) -> dict:
         'modify_options': result.get('modify_options'),
         'awaiting_input': result.get('awaiting_input', True),
         'choices': _build_choices(result),
-        # Show the free-text box by default only when the control group has the
-        # finished plan and can edit items afterwards.
-        'show_input': (result.get('condition') == CONDITION_CONTROL
-                       and result.get('stage') == 'delivered'),
-        'input_placeholder': '바꾸고 싶은 항목을 입력하세요 (선택) · 예: 3일차 운동을 요가로',
+        # Keep the input hidden until the user explicitly selects a free-text
+        # action such as "항목 수정 요청".
+        'show_input': bool(result.get('show_input', False)),
+        'input_placeholder': '바꾸고 싶은 항목을 입력하세요 · 예: 3일차 운동을 요가로',
         'server_build': APP_BUILD,
     }
     payload.update(extra)

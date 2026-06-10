@@ -14,7 +14,7 @@ from database.db_manager import DBManager
 def test_database():
     """Test database operations."""
     print("Testing Database Manager...")
-    
+
     # Use a test database
     db = DBManager('database/test_chatbot.db')
     
@@ -79,15 +79,21 @@ def test_workflow_stages():
     
     from services.workflow_manager import WorkflowManager
     
-    # Check that stages are properly defined
-    assert len(WorkflowManager.STAGES) == 3, "Should have 3 stages"
-    print(f"✓ Workflow has {len(WorkflowManager.STAGES)} stages")
+    # Check that the full and goal-adaptive pipelines are properly defined.
+    assert WorkflowManager.PIPELINE[-1] == 'delivery', "Pipeline should end in delivery"
+    assert 'workout' in WorkflowManager.PIPELINE, "Pipeline should include workout"
+    assert set(WorkflowManager.PIPELINES) == {'sleep', 'habit', 'diet', 'weight', 'overall'}
+    print(f"✓ Full workflow has {len(WorkflowManager.PIPELINE)} stages")
     
-    for i, stage in enumerate(WorkflowManager.STAGES, 1):
-        desc = WorkflowManager.STAGE_DESCRIPTIONS.get(stage)
+    for i, stage in enumerate(WorkflowManager.PIPELINE, 1):
+        desc = WorkflowManager.STAGE_DESCRIPTIONS.get(
+            'delivered' if stage == 'delivery' else stage
+        )
         print(f"  Stage {i}: {stage} - {desc}")
     
-    print("✅ Workflow configuration is correct!")
+    for goal, pipeline in WorkflowManager.PIPELINES.items():
+        assert pipeline[-1] == 'delivery', f"{goal} pipeline should end in delivery"
+    print("✅ Goal-adaptive workflow configuration is correct!")
 
 
 def test_imports():
@@ -121,7 +127,7 @@ def test_imports():
 
 if __name__ == '__main__':
     print("=" * 60)
-    print("Flask 3-Stage Chatbot - Component Tests")
+    print("AI Wellness Agent - Component Tests")
     print("=" * 60)
     
     if not test_imports():

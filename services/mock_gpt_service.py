@@ -5,6 +5,7 @@ Mirrors GPTService.generate_agent_response so the experiment UI and condition
 logic can be exercised end-to-end in demo mode.
 """
 
+import re
 from typing import List, Dict, Optional
 
 
@@ -71,12 +72,17 @@ class MockGPTService:
                           "이 영양 가이드대로 진행할까요, 아니면 조정할 부분이 있나요?")
 
         if phase == 'meal':
-            body = "선호를 반영해 균형 잡힌 하루 식단을 구성했어요."
+            body = f"선호와 목표를 반영해 {self._diet_strategy(goal)}으로 하루 식단을 구성했어요."
             return finish(body, "이 구성대로 운동 루틴을 설계할게요.",
                           "이 식단이 괜찮으신가요? 바꾸고 싶은 메뉴가 있으면 말씀해 주세요.")
 
         if phase == 'workout':
-            body = "가능한 시간에 맞춰 주간 운동 루틴을 짰어요."
+            availability = self._exercise_availability(profile)
+            current_level = self._exercise_level(profile)
+            body = (
+                f"현재 운동 수준({current_level})과 운동 가능 시간({availability})을 반영해 "
+                "첫 주는 무리 없이 적응하고 둘째 주에 강도를 조금 높이는 루틴을 짰어요."
+            )
             return finish(body, "이 루틴대로 수면·생활습관을 설계할게요.",
                           "휴식일 배치나 운동 종류를 바꾸고 싶으면 말씀해 주세요.")
 
@@ -93,16 +99,24 @@ class MockGPTService:
             return finish(body)
 
         if phase == 'grocery':
-            body = "식단에 맞춰 1주차 장보기 리스트를 만들었어요."
+            body = (
+                "식단에 맞춰 1주차와 2주차 장보기 리스트를 서로 다르게 구성했어요.\n"
+                "- 1주차 예상 예산: 약 55,000~65,000원\n"
+                "- 2주차 예상 예산: 약 60,000~72,000원\n"
+                "- 2주 총예산: 약 115,000~137,000원\n"
+                "실제 가격은 지역·브랜드·이미 보유한 식재료에 따라 달라질 수 있어요."
+            )
             return finish(body, "루틴을 최종 정리할게요.", "빠진 품목이 있으면 알려주세요.")
 
         if phase == 'delivery':
             return "맞춤형 건강 루틴이 완성되었습니다! 🎉 이번 주부터 저와 함께 건강한 루틴을 만들어가요!"
 
         if phase == 'override':
+            request = (override_instruction or user_message).strip()
             return (
-                f"요청하신 부분을 수정했습니다: {override_instruction or user_message}\n"
-                "- 해당 항목만 교체했고 나머지 루틴은 그대로 유지됩니다.\n\n"
+                "수정 요청을 최신 루틴에 반영했습니다.\n"
+                f"- 반영 내용: {request}\n"
+                "- 수정된 항목은 새 계획 카드에 표시했고, 나머지 루틴은 그대로 유지했습니다.\n\n"
                 "추가로 바꾸고 싶은 부분이 있나요?"
             )
 
@@ -162,3 +176,25 @@ class MockGPTService:
         if '컨디션' in text or '에너지' in text:
             return '전반적인 컨디션·에너지 향상', '에너지 수준과 일상 활력 향상'
         return '건강한 생활 루틴', '식단·운동·수면의 균형'
+
+    @staticmethod
+    def _exercise_availability(profile):
+        match = re.search(r'운동 가능:\s*([^/]+)', profile or '')
+        return match.group(1).strip() if match else '주 3회, 회당 약 30분'
+
+    @staticmethod
+    def _exercise_level(profile):
+        text = profile or ''
+        for phrase in ('운동을 거의 안 해요', '운동을 가끔 해요', '주 1~2회 운동해요', '주 3회 이상 운동해요'):
+            if phrase in text:
+                return phrase
+        return '현재 수준에 맞춰 점진적으로 시작'
+
+    @staticmethod
+    def _diet_strategy(goal):
+        strategies = {
+            '체중 감량': '단백질을 충분히 챙기고 튀김·포화지방을 줄이는 방향',
+            '식습관 개선': '채소·통곡물 중심으로 야식과 군것질을 줄이는 방향',
+            '전반적인 컨디션·에너지 향상': '단백질·통곡물·채소를 고르게 챙겨 에너지를 유지하는 방향',
+        }
+        return strategies.get(goal, '가공식품을 줄이고 필요한 영양을 충분히 챙기는 방향')

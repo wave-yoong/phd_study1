@@ -535,7 +535,7 @@
         }
 
         .agent-step.reveal .agent-step-body {
-            max-height: 1600px;
+            max-height: 2800px;
             padding: 12px 14px;
             border-top: 1px solid #eef0f6;
         }
@@ -574,6 +574,75 @@
         .summary-card .info-emoji { background: #e7f7f0; }
         .info-title { font-weight: 700; font-size: 13px; color: #202123; margin-bottom: 2px; }
         .info-body { font-size: 13px; color: #4b5563; line-height: 1.45; }
+
+        .grocery-weeks {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px;
+        }
+        .grocery-week {
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 12px;
+            background: #fbfcfe;
+        }
+        .grocery-week-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            margin-bottom: 9px;
+        }
+        .grocery-week-title { font-size: 14px; font-weight: 800; color: #1f2937; }
+        .grocery-budget {
+            font-size: 12px;
+            font-weight: 700;
+            color: #0d8c6d;
+            background: #e7f7f0;
+            border-radius: 999px;
+            padding: 4px 8px;
+            white-space: nowrap;
+        }
+        .grocery-list { display: flex; flex-direction: column; gap: 7px; }
+        .grocery-row {
+            display: grid;
+            grid-template-columns: 23px 62px 1fr;
+            gap: 6px;
+            align-items: start;
+            font-size: 12px;
+            line-height: 1.45;
+            color: #4b5563;
+        }
+        .grocery-row strong { color: #374151; }
+        .grocery-total {
+            margin-top: 10px;
+            padding: 10px 12px;
+            border-radius: 10px;
+            background: #eff6ff;
+            border: 1px solid #dbeafe;
+            color: #1d4ed8;
+            font-size: 13px;
+            font-weight: 700;
+        }
+        .grocery-note {
+            margin-top: 6px;
+            color: #6b7280;
+            font-size: 11px;
+            line-height: 1.45;
+        }
+
+        .revision-box {
+            margin: 0 0 10px;
+            padding: 10px 12px;
+            border-radius: 10px;
+            background: #ecfdf5;
+            border: 1px solid #a7f3d0;
+            border-left: 4px solid #10b981;
+            color: #065f46;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+        .revision-list { margin: 5px 0 0; padding-left: 18px; }
 
         .safety-box {
             display: flex; gap: 10px; align-items: flex-start;
@@ -786,6 +855,10 @@
             border-radius: 8px; padding: 9px 16px; font-size: 13px; font-weight: 600;
         }
         .bw-submit:hover { background: #0d8c6d; color: #fff; }
+
+        @media (max-width: 640px) {
+            .grocery-weeks { grid-template-columns: 1fr; }
+        }
     </style>
 </head>
 <body>
@@ -847,8 +920,8 @@
     
     <script>
         // Bump this whenever the UI changes so we can confirm the running build.
-        const BUILD = 'wellness-build-13 · auto-fix+modify-menu+safety';
-        const EXPECTED_SERVER_BUILD = 'wellness-build-13';
+        const BUILD = 'wellness-build-14 · two-week-grocery+applied-edits';
+        const EXPECTED_SERVER_BUILD = 'wellness-build-14';
         console.log('[study] UI ' + BUILD);
         window.addEventListener('DOMContentLoaded', () => {
             const t = document.getElementById('buildTag');
@@ -940,6 +1013,14 @@
         // Render a step's structured visual (macro bar / 2-week calendar) as an infographic.
         function renderStepVisual(visual) {
             if (!visual) return '';
+            const revision = visual.revision
+                ? `<div class="revision-box"><b>수정 반영 완료</b><br>${escapeHtml(visual.revision)}</div>`
+                : '';
+            const revisions = Array.isArray(visual.revisions) && visual.revisions.length
+                ? `<div class="revision-box"><b>최종 루틴에 반영된 수정사항</b><ul class="revision-list">${
+                    visual.revisions.map(item => `<li>${escapeHtml(item)}</li>`).join('')
+                }</ul></div>`
+                : '';
             if (visual.type === 'macros') {
                 const colors = ['#10a37f', '#6366f1', '#f59e0b'];
                 const segs = (visual.items || []).map((it, i) =>
@@ -950,6 +1031,7 @@
                     `<span class="macro-extra">${escapeHtml(e.label)} ${escapeHtml(e.value)}</span>`).join('');
                 return `
                     <div class="viz">
+                        ${revision}
                         <div class="viz-kcal">하루 약 ${visual.kcal.toLocaleString()} kcal</div>
                         <div class="macro-bar">${segs}</div>
                         <div class="macro-legend">${legend}${extras}</div>
@@ -967,15 +1049,42 @@
                     </div>`).join('');
                 return `
                     <div class="viz">
+                        ${revision}${revisions}
                         ${visual.title ? `<div class="viz-title">${escapeHtml(visual.title)}</div>` : ''}
                         <div class="info-grid">${cards}</div>
                         ${visual.safety ? `<div class="safety-box"><span class="safety-icon">⚠️</span><span><b>안전 안내</b><br>${escapeHtml(visual.safety)}</span></div>` : ''}
+                    </div>`;
+            }
+            if (visual.type === 'grocery') {
+                const weeks = (visual.weeks || []).map(week => `
+                    <section class="grocery-week">
+                        <div class="grocery-week-head">
+                            <span class="grocery-week-title">${escapeHtml(week.label || '')}</span>
+                            <span class="grocery-budget">${escapeHtml(week.budget || '')}</span>
+                        </div>
+                        <div class="grocery-list">
+                            ${(week.cards || []).map(card => `
+                                <div class="grocery-row">
+                                    <span>${escapeHtml(card.emoji || '•')}</span>
+                                    <strong>${escapeHtml(card.title || '')}</strong>
+                                    <span>${escapeHtml(card.body || '')}</span>
+                                </div>`).join('')}
+                        </div>
+                    </section>`).join('');
+                return `
+                    <div class="viz">
+                        ${revision}
+                        ${visual.title ? `<div class="viz-title">${escapeHtml(visual.title)}</div>` : ''}
+                        <div class="grocery-weeks">${weeks}</div>
+                        ${visual.total_budget ? `<div class="grocery-total">${escapeHtml(visual.total_budget)}</div>` : ''}
+                        ${visual.budget_note ? `<div class="grocery-note">${escapeHtml(visual.budget_note)}</div>` : ''}
                     </div>`;
             }
             if (visual.type === 'sleep') {
                 const tips = (visual.tips || []).map(t => `<li>${escapeHtml(t)}</li>`).join('');
                 return `
                     <div class="viz">
+                        ${revision}
                         <div class="sleep-clock">
                             <div class="sleep-time"><span class="st-label">취침</span><span class="st-val">${escapeHtml(visual.bedtime)}</span></div>
                             <div class="sleep-arrow">→</div>
@@ -999,6 +1108,7 @@
                 if (visual.diet_summary) summary.push(`<div class="cal-summary"><span>${iconSvg('meal')}</span>${escapeHtml(visual.diet_summary)}</div>`);
                 return `
                     <div class="viz">
+                        ${revision}
                         ${summary.join('')}
                         <div class="cal-grid">${cells}</div>
                         <div class="cal-legend">
@@ -1405,7 +1515,7 @@
 
             renderChoices(messageDiv, getRenderableChoices(data), data.modify_options);
 
-            // Show the free-text box by default when the finished plan can be edited.
+            // Only explicitly requested free-text actions reveal the input.
             if (data.show_input) {
                 showChatInput(data.input_placeholder || '');
             }
