@@ -343,14 +343,15 @@ class WorkflowManager:
                 return self._run_pipeline(conversation_id, condition, first_phase, user_message, autonomy)
             return self._run_single_phase(conversation_id, condition, first_phase, user_message, autonomy)
 
-        # Position-aware connector so wording fits the flow (먼저 / 이제 / 마지막으로).
+        # Position-aware, varied connector so wording feels natural across the flow.
         pos = flow.index(next_id)
+        mids = ['다음으로, ', '그럼, ', '이어서, ', '좋아요, 그럼 ']
         if pos == 0:
             connector = '먼저, '
         elif pos == len(flow) - 1:
             connector = '마지막으로, '
         else:
-            connector = '이제, '
+            connector = mids[(pos - 1) % len(mids)]
         return self._ask_question(conversation_id, self.QUESTIONS[next_id],
                                   condition, autonomy, user_message, connector=connector)
 
@@ -400,7 +401,7 @@ class WorkflowManager:
         actions = [self._action_card(phase)]
         controls = (condition == 'control') and not is_last
         has_diet = 'meal' in self._pipeline(conversation_id)
-        steps = [self._step_card(phase, response, visual=self._step_visual(phase, has_diet))]
+        steps = [self._step_card(phase, response, visual=self._step_visual(conversation_id, phase, has_diet))]
         approval_prompt = meta['approve'] if (condition == 'control' and not is_last) else None
         # The step card carries the content; keep the message body empty to avoid
         # duplicating it. For the final plan, add a short confirmation note.
@@ -443,7 +444,7 @@ class WorkflowManager:
             )
             working_history.append({'role': 'assistant', 'content': text})
             actions.append(self._action_card(phase))
-            steps.append(self._step_card(phase, text, visual=self._step_visual(phase, has_diet)))
+            steps.append(self._step_card(phase, text, visual=self._step_visual(conversation_id, phase, has_diet)))
             parts.append(f"[{meta['label']}]\n{text}")
 
         closing = ("계획을 모두 확정했습니다. 그대로 따라 주시면 됩니다."
@@ -653,9 +654,13 @@ class WorkflowManager:
 
     # Canonical baseline values, shared by the visuals and the demo content.
     MACROS = {'kcal': 1900, 'carb': 45, 'protein': 30, 'fat': 25}
+    GOAL_LABELS = {
+        'sleep': '수면의 질 개선', 'habit': '규칙적인 운동 습관',
+        'diet': '식습관 개선', 'weight': '체중 감량', 'overall': '전반적 컨디션·에너지',
+    }
 
-    def _step_visual(self, phase: str, has_diet: bool = True) -> Optional[Dict[str, Any]]:
-        """Structured data the frontend renders as an infographic (macro bar / calendar)."""
+    def _step_visual(self, conversation_id: int, phase: str, has_diet: bool = True) -> Optional[Dict[str, Any]]:
+        """Structured data the frontend renders as cards / infographics."""
         if phase == 'calc':
             m = self.MACROS
             return {
@@ -665,6 +670,27 @@ class WorkflowManager:
                     {'label': '단백질', 'pct': m['protein']},
                     {'label': '지방', 'pct': m['fat']},
                 ],
+                'extras': [{'label': '수분', 'value': '1.5~2L'}],
+            }
+        if phase == 'meal':
+            return {'type': 'cards', 'title': '하루 식단 예시', 'cards': [
+                {'emoji': '🥣', 'title': '아침', 'body': '그릭요거트 + 베리 + 견과'},
+                {'emoji': '🍱', 'title': '점심', 'body': '현미밥 + 닭가슴살(또는 두부) + 샐러드'},
+                {'emoji': '🥗', 'title': '저녁', 'body': '채소볶음 + 미역국 + 잡곡밥'},
+                {'emoji': '🍎', 'title': '간식', 'body': '방울토마토, 삶은 달걀'},
+            ]}
+        if phase == 'workout':
+            return {'type': 'cards', 'title': '주간 운동 루틴', 'cards': [
+                {'emoji': '🏋️', 'title': '월·목', 'body': '전신 근력 30분'},
+                {'emoji': '🏃', 'title': '화·금', 'body': '유산소 40분'},
+                {'emoji': '🚶', 'title': '토', 'body': '가벼운 활동(산책·스트레칭)'},
+                {'emoji': '😴', 'title': '수·일', 'body': '휴식'},
+            ]}
+        if phase == 'sleep':
+            return {
+                'type': 'sleep', 'bedtime': '23:30', 'waketime': '07:00', 'duration': '약 7.5시간',
+                'tips': ['취침 1시간 전 스크린 줄이기', '오후 2시 이후 카페인 자제',
+                         '기상 후 물 한 잔', '하루 10분 산책으로 스트레스 관리'],
             }
         if phase == 'schedule':
             days = []
@@ -675,8 +701,6 @@ class WorkflowManager:
                     kind = 'strength' if d % 2 else 'cardio'
                 days.append({'day': d, 'kind': kind,
                              'tag': '컨디션 점검' if d in (1, 8, 14) else ''})
-            # Constant routines are stated once (single line) rather than repeated
-            # in every day cell, which reads as more trustworthy.
             return {
                 'type': 'calendar',
                 'sleep_summary': '매일 취침 23:30 · 기상 07:00 (약 7.5시간)',
@@ -684,6 +708,21 @@ class WorkflowManager:
                                  if has_diet else ''),
                 'days': days,
             }
+        if phase == 'grocery':
+            return {'type': 'cards', 'title': '1주차 장보기 리스트', 'cards': [
+                {'emoji': '🍗', 'title': '단백질', 'body': '닭가슴살 5팩, 두부 4모, 달걀 1판, 그릭요거트 7개'},
+                {'emoji': '🥦', 'title': '채소', 'body': '샐러드 채소, 브로콜리, 미역, 방울토마토'},
+                {'emoji': '🍚', 'title': '탄수화물', 'body': '현미 1kg, 고구마 7개'},
+                {'emoji': '🥜', 'title': '기타', 'body': '견과류, 올리브유, 베리류'},
+            ]}
+        if phase == 'delivery':
+            goal = self.GOAL_LABELS.get(self._goal_key(conversation_id), '건강 루틴')
+            cards = [{'emoji': '🎯', 'title': '목표', 'body': goal}]
+            if has_diet:
+                cards.append({'emoji': '🍽️', 'title': '식단', 'body': '하루 약 1,900kcal 균형식'})
+            cards.append({'emoji': '💪', 'title': '운동', 'body': '주 5일 (근력+유산소), 수·일 휴식'})
+            cards.append({'emoji': '😴', 'title': '수면', 'body': '취침 23:30 · 기상 07:00'})
+            return {'type': 'summary', 'title': '2주 건강 루틴 요약', 'cards': cards}
         return None
 
     def _classify_intent(self, user_message: str) -> str:
@@ -702,8 +741,9 @@ class WorkflowManager:
         question_patterns = ['왜', '이유', '어째서', '무슨', '무엇', '뭐', '어떻게', '어떤', '궁금',
                              '설명', '근거', '왜냐', '뜻', '의미', 'why', '인가요', '인가', '나요?', '맞나']
         if user_message.strip().endswith('?') or any(p in msg for p in question_patterns):
-            # but an explicit change request that also contains '?' should still modify
-            change_words = ['바꿔', '수정', '변경', '교체', '빼줘', '추가해']
+            # If the message also requests a change, treat it as a modification.
+            change_words = ['바꿔', '바꾸', '수정', '변경', '교체', '빼', '넣어', '추가', '줄여', '늘려',
+                            '더 ', '덜 ', '말고', '대신', '조정', '올려', '내려', '해줘', '해 줘']
             if not any(c in msg for c in change_words):
                 return 'question'
 

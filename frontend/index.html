@@ -333,6 +333,8 @@
             width: 100%;
         }
         
+        .input-group.hidden { display: none; }
+
         .input-group {
             display: flex;
             gap: 8px;
@@ -550,6 +552,39 @@
         .macro-leg .dot, .cal-legend .dot {
             width: 9px; height: 9px; border-radius: 999px; display: inline-block;
         }
+
+        .viz-title { font-weight: 700; font-size: 14px; color: #1f2937; margin-bottom: 10px; }
+        .macro-extra { color: #4b5563; }
+
+        .info-grid {
+            display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;
+        }
+        .info-card {
+            display: flex; align-items: flex-start; gap: 10px;
+            background: #ffffff; border: 1px solid #ececf1; border-radius: 12px;
+            padding: 11px 12px;
+        }
+        .summary-card { background: #f7fbf9; border-color: #d9efe6; }
+        .info-emoji {
+            font-size: 20px; line-height: 1; flex-shrink: 0;
+            width: 34px; height: 34px; border-radius: 9px; background: #f3f4f6;
+            display: inline-flex; align-items: center; justify-content: center;
+        }
+        .summary-card .info-emoji { background: #e7f7f0; }
+        .info-title { font-weight: 700; font-size: 13px; color: #202123; margin-bottom: 2px; }
+        .info-body { font-size: 13px; color: #4b5563; line-height: 1.45; }
+
+        .sleep-clock {
+            display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+            background: #f5f3ff; border: 1px solid #e6e2ff; border-radius: 12px;
+            padding: 14px 16px; margin-bottom: 10px;
+        }
+        .sleep-time { display: flex; flex-direction: column; align-items: center; }
+        .st-label { font-size: 12px; color: #6b7280; }
+        .st-val { font-size: 22px; font-weight: 800; color: #4f46e5; letter-spacing: 0.5px; }
+        .sleep-arrow { font-size: 20px; color: #a5b4fc; }
+        .sleep-dur { margin-left: auto; font-size: 13px; color: #6366f1; font-weight: 600; }
+        .sleep-tips { margin: 0; padding-left: 18px; font-size: 13px; color: #4b5563; line-height: 1.7; }
 
         .cal-summary {
             display: flex; align-items: center; gap: 7px;
@@ -803,12 +838,13 @@
     
     <script>
         // Bump this whenever the UI changes so we can confirm the running build.
-        const BUILD = 'wellness-build-11 · goal-adaptive pipeline';
-        const EXPECTED_SERVER_BUILD = 'wellness-build-11';
+        const BUILD = 'wellness-build-12 · card visuals';
+        const EXPECTED_SERVER_BUILD = 'wellness-build-12';
         console.log('[study] UI ' + BUILD);
         window.addEventListener('DOMContentLoaded', () => {
             const t = document.getElementById('buildTag');
             if (t) t.textContent = 'UI ' + BUILD;
+            hideChatInput();
         });
 
         // Confirm the BACKEND is also up to date; a stale server (old Python on the
@@ -856,6 +892,19 @@
 
         const delay = (ms) => new Promise(r => setTimeout(r, ms));
 
+        // The chat input is hidden by default and only revealed when the user picks
+        // a free-text option ('기타 (직접 입력)' / '이 항목 수정' 등).
+        function showChatInput() {
+            const g = document.getElementById('queryInput');
+            if (g) g.classList.remove('hidden');
+            const i = document.getElementById('userInput');
+            if (i) i.focus();
+        }
+        function hideChatInput() {
+            const g = document.getElementById('queryInput');
+            if (g) g.classList.add('hidden');
+        }
+
         // Inline SVG icons for each simulated agent tool.
         function iconSvg(name) {
             const P = 'fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"';
@@ -885,11 +934,42 @@
                     `<div class="macro-seg" style="width:${it.pct}%;background:${colors[i % 3]}"></div>`).join('');
                 const legend = (visual.items || []).map((it, i) =>
                     `<span class="macro-leg"><span class="dot" style="background:${colors[i % 3]}"></span>${escapeHtml(it.label)} ${it.pct}%</span>`).join('');
+                const extras = (visual.extras || []).map(e =>
+                    `<span class="macro-extra">${escapeHtml(e.label)} ${escapeHtml(e.value)}</span>`).join('');
                 return `
                     <div class="viz">
                         <div class="viz-kcal">하루 약 ${visual.kcal.toLocaleString()} kcal</div>
                         <div class="macro-bar">${segs}</div>
-                        <div class="macro-legend">${legend}</div>
+                        <div class="macro-legend">${legend}${extras}</div>
+                    </div>`;
+            }
+            if (visual.type === 'cards' || visual.type === 'summary') {
+                const cls = visual.type === 'summary' ? 'info-card summary-card' : 'info-card';
+                const cards = (visual.cards || []).map(cd => `
+                    <div class="${cls}">
+                        <div class="info-emoji">${escapeHtml(cd.emoji || '•')}</div>
+                        <div class="info-text">
+                            <div class="info-title">${escapeHtml(cd.title || '')}</div>
+                            <div class="info-body">${escapeHtml(cd.body || '')}</div>
+                        </div>
+                    </div>`).join('');
+                return `
+                    <div class="viz">
+                        ${visual.title ? `<div class="viz-title">${escapeHtml(visual.title)}</div>` : ''}
+                        <div class="info-grid">${cards}</div>
+                    </div>`;
+            }
+            if (visual.type === 'sleep') {
+                const tips = (visual.tips || []).map(t => `<li>${escapeHtml(t)}</li>`).join('');
+                return `
+                    <div class="viz">
+                        <div class="sleep-clock">
+                            <div class="sleep-time"><span class="st-label">취침</span><span class="st-val">${escapeHtml(visual.bedtime)}</span></div>
+                            <div class="sleep-arrow">→</div>
+                            <div class="sleep-time"><span class="st-label">기상</span><span class="st-val">${escapeHtml(visual.waketime)}</span></div>
+                            <div class="sleep-dur">${escapeHtml(visual.duration || '')}</div>
+                        </div>
+                        <ul class="sleep-tips">${tips}</ul>
                     </div>`;
             }
             if (visual.type === 'calendar') {
@@ -1018,8 +1098,7 @@
 
                     const value = (choice.value || '').trim();
                     if (!value) {
-                        const input = document.getElementById('userInput');
-                        input.focus();
+                        showChatInput();
                         return;
                     }
 
@@ -1242,6 +1321,7 @@
         // Orchestrate an assistant turn: animate tool steps, then reveal text,
         // approval prompt, widget, and clickable choices.
         async function renderAssistant(data) {
+            hideChatInput();
             const chatArea = document.getElementById('chatArea');
             const messageDiv = document.createElement('div');
             messageDiv.className = 'message assistant';
