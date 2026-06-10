@@ -551,6 +551,12 @@
             width: 9px; height: 9px; border-radius: 999px; display: inline-block;
         }
 
+        .cal-summary {
+            display: flex; align-items: center; gap: 7px;
+            font-size: 13px; color: #374151; margin-bottom: 8px;
+        }
+        .cal-summary span { display: inline-flex; color: #0d8c6d; }
+
         .cal-grid {
             display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px;
         }
@@ -797,8 +803,8 @@
     
     <script>
         // Bump this whenever the UI changes so we can confirm the running build.
-        const BUILD = 'wellness-build-9 · answers+visuals';
-        const EXPECTED_SERVER_BUILD = 'wellness-build-9';
+        const BUILD = 'wellness-build-10 · phrasing+sleep-input+schedule-viz';
+        const EXPECTED_SERVER_BUILD = 'wellness-build-10';
         console.log('[study] UI ' + BUILD);
         window.addEventListener('DOMContentLoaded', () => {
             const t = document.getElementById('buildTag');
@@ -895,8 +901,12 @@
                         <span class="cal-kind">${kindLabel[d.kind] || ''}</span>
                         ${d.tag ? `<span class="cal-tag">점검</span>` : ''}
                     </div>`).join('');
+                const summary = [];
+                if (visual.sleep_summary) summary.push(`<div class="cal-summary"><span>${iconSvg('sleep')}</span>${escapeHtml(visual.sleep_summary)}</div>`);
+                if (visual.diet_summary) summary.push(`<div class="cal-summary"><span>${iconSvg('meal')}</span>${escapeHtml(visual.diet_summary)}</div>`);
                 return `
                     <div class="viz">
+                        ${summary.join('')}
                         <div class="cal-grid">${cells}</div>
                         <div class="cal-legend">
                             <span><span class="dot d-strength"></span>근력</span>
@@ -1199,6 +1209,36 @@
             container.appendChild(panel);
         }
 
+        // Bedtime / wake-time inputs.
+        function renderSleepTimeWidget(container, widget) {
+            const panel = document.createElement('div');
+            panel.className = 'body-widget';
+            panel.innerHTML = `
+                <div class="bw-fields">
+                    <label class="bw-field"><span>취침</span><input type="time" id="stBed" value="23:30"></label>
+                    <label class="bw-field"><span>기상</span><input type="time" id="stWake" value="07:00"></label>
+                </div>
+                <div class="bw-actions">
+                    <button type="button" class="bw-skip">잘 모르겠어요</button>
+                    <button type="button" class="bw-submit">이 시간으로 진행</button>
+                </div>
+            `;
+            panel.querySelector('.bw-skip').addEventListener('click', () => {
+                const input = document.getElementById('userInput');
+                input.value = '평소 취침·기상 시간이 일정하지 않아요';
+                sendMessage();
+            });
+            panel.querySelector('.bw-submit').addEventListener('click', () => {
+                const bed = panel.querySelector('#stBed').value;
+                const wake = panel.querySelector('#stWake').value;
+                if (!bed || !wake) { showError('취침·기상 시간을 입력해주세요'); return; }
+                const input = document.getElementById('userInput');
+                input.value = `평소 취침 ${bed}, 기상 ${wake}`;
+                sendMessage();
+            });
+            container.appendChild(panel);
+        }
+
         // Orchestrate an assistant turn: animate tool steps, then reveal text,
         // approval prompt, widget, and clickable choices.
         async function renderAssistant(data) {
@@ -1243,6 +1283,8 @@
                 renderDayTimeWidget(messageDiv, data.widget);
             } else if (data.widget && data.widget.type === 'body_metrics') {
                 renderBodyWidget(messageDiv, data.widget);
+            } else if (data.widget && data.widget.type === 'sleep_time') {
+                renderSleepTimeWidget(messageDiv, data.widget);
             }
 
             renderChoices(messageDiv, getRenderableChoices(data));

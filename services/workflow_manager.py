@@ -52,7 +52,7 @@ class WorkflowManager:
     QUESTIONS = {
         'q_food': {
             'stage': 'q_food', 'icon': 'meal',
-            'question': '식단부터 볼게요. 좋아하거나 피하고 싶은 음식, 알레르기가 있나요?',
+            'question': '식단을 살펴볼게요. 좋아하거나 피하고 싶은 음식, 알레르기가 있나요?',
             'options': [
                 {'id': 'food_none', 'label': '특별히 가리는 것 없어요', 'value': '특별히 가리는 음식은 없어요'},
                 {'id': 'food_meat', 'label': '육류를 선호해요', 'value': '육류를 선호해요'},
@@ -80,20 +80,14 @@ class WorkflowManager:
         },
         'q_body': {
             'stage': 'q_body', 'icon': 'body',
-            'question': '마지막으로, 더 정확한 계획을 위해 키와 몸무게를 알려주실 수 있나요? (선택)',
+            'question': '더 정확한 계획을 위해 키와 몸무게를 알려주실 수 있나요? (선택)',
             'widget': {'type': 'body_metrics'},
         },
         # --- sleep goal ---
         'q_sleep_time': {
             'stage': 'q_sleep_time', 'icon': 'sleep',
-            'question': '평소 취침·기상 시간은 어떻게 되세요?',
-            'options': [
-                {'id': 'st_early', 'label': '일찍 자고 일찍 일어나요', 'value': '일찍 자고 일찍 일어나요'},
-                {'id': 'st_normal', 'label': '보통 (23시~7시)', 'value': '보통 23시쯤 자고 7시쯤 일어나요'},
-                {'id': 'st_late', 'label': '늦게 자요 (1시 이후)', 'value': '새벽 1시 이후에 자요'},
-                {'id': 'st_irregular', 'label': '매일 들쭉날쭉해요', 'value': '취침·기상 시간이 매일 불규칙해요'},
-                {'id': 'custom', 'label': '기타 (직접 입력)', 'value': ''},
-            ],
+            'question': '평소 몇 시에 자고 몇 시에 일어나세요?',
+            'widget': {'type': 'sleep_time'},
         },
         'q_sleep_issue': {
             'stage': 'q_sleep_issue', 'icon': 'sleep',
@@ -335,15 +329,24 @@ class WorkflowManager:
                 return self._run_pipeline(conversation_id, condition, 'calc', user_message, autonomy)
             return self._run_single_phase(conversation_id, condition, 'calc', user_message, autonomy)
 
+        # Position-aware connector so wording fits the flow (먼저 / 이제 / 마지막으로).
+        pos = flow.index(next_id)
+        if pos == 0:
+            connector = '먼저, '
+        elif pos == len(flow) - 1:
+            connector = '마지막으로, '
+        else:
+            connector = '이제, '
         return self._ask_question(conversation_id, self.QUESTIONS[next_id],
-                                  condition, autonomy, user_message)
+                                  condition, autonomy, user_message, connector=connector)
 
     def _ask_question(
         self, conversation_id: int, step: Dict[str, Any], condition: str, autonomy: str,
-        user_message: str, greet: bool = False
+        user_message: str, greet: bool = False, connector: str = ''
     ) -> Dict[str, Any]:
         """Ask one intake question with clickable options or a widget (deterministic)."""
-        response = (self.INTAKE_GREETING + '\n\n' + step['question']) if greet else step['question']
+        question = (connector + step['question']) if connector else step['question']
+        response = (self.INTAKE_GREETING + '\n\n' + question) if greet else question
         self.db_manager.add_message(conversation_id, 'assistant', response)
         self.db_manager.add_workflow_state(
             conversation_id=conversation_id, stage=step['stage'],
@@ -646,7 +649,14 @@ class WorkflowManager:
                     kind = 'strength' if d % 2 else 'cardio'
                 days.append({'day': d, 'kind': kind,
                              'tag': '컨디션 점검' if d in (1, 8, 14) else ''})
-            return {'type': 'calendar', 'days': days}
+            # Constant routines are stated once (single line) rather than repeated
+            # in every day cell, which reads as more trustworthy.
+            return {
+                'type': 'calendar',
+                'sleep_summary': '매일 취침 23:30 · 기상 07:00 (약 7.5시간)',
+                'diet_summary': f"매일 약 {self.MACROS['kcal']:,}kcal 균형식 (3끼 + 가벼운 간식)",
+                'days': days,
+            }
         return None
 
     def _classify_intent(self, user_message: str) -> str:

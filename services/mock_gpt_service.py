@@ -118,14 +118,15 @@ class MockGPTService:
                           "수면 시간대나 생활습관을 조정하고 싶으면 말씀해 주세요.")
 
         if phase == 'schedule':
-            lines = ["일정 편성기를 실행해 2주 루틴을 편성했습니다.\n"]
+            lines = [
+                "일정 편성기를 실행해 2주 루틴을 편성했습니다.",
+                "공통(매일): 수면 23:30-07:00, 식단 약 1,900kcal 균형식\n",
+            ]
             for d in range(1, 15):
                 rest = (d % 7 in (3, 0))
                 workout = "휴식" if rest else ("근력 30분" if d % 2 else "유산소 40분")
-                lines.append(
-                    f"{d}일차: 식단 균형식 / 운동 {workout} / "
-                    f"수면 23:30-07:00{', 컨디션 점검' if d in (1, 8, 14) else ', 스트레칭 5분'}"
-                )
+                tag = " · 컨디션 점검" if d in (1, 8, 14) else ""
+                lines.append(f"{d}일차: 운동 {workout}{tag}")
             body = "\n".join(lines)
             return finish(body, "이대로 장보기 리스트까지 생성하겠습니다.",
                           "특정 날짜를 바꾸고 싶으면 'N일차 ...' 형태로 말씀해 주세요.")

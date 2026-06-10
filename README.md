@@ -5,7 +5,9 @@ This repository contains a Flask web app for studying the **effect of user contr
 
 ## Scenario (shown to participants)
 
-> 당신은 앞으로 2주간 더 건강한 생활 루틴을 만들고 싶어 합니다. 당신의 AI 웰니스 에이전트는 식단·운동·수면과 일상 습관을 포함한 2주 루틴을 대신 설계해 줍니다. 체중 감량 같은 특정 목표가 있다면 선택적으로 반영할 수 있습니다.
+> 당신은 앞으로 2주간 더 건강한 생활 루틴을 만들고 싶어 합니다. 당신의 AI 웰니스 에이전트는 식단·운동·수면과 일상 습관을 포함한 2주 루틴을 대신 설계해 줍니다. 체중 감량 같은 특정 목표가 있다면 선택적으로 반영할 수 있습니다. AI 에이전트와 대화하면서 2주간의 건강 루틴을 함께 계획해 주세요.
+
+이 시나리오 문구는 `frontend/index.html`의 시나리오 박스와 동일하게 유지됩니다.
 
 ## Experimental conditions (between-subjects)
 
