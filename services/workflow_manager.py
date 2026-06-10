@@ -625,15 +625,27 @@ class WorkflowManager:
             tool_name='plan_compiler', intervention_type='override', autonomy_level=autonomy
         )
         has_diet = 'meal' in self._pipeline(conversation_id)
-        steps = [self._step_card(
+        revision = self._revision_detail(user_message)
+        edited_phase = self._revision_phase(revision)
+        steps = []
+        actions = []
+        if edited_phase != 'delivery':
+            steps.append(self._step_card(
+                edited_phase,
+                '',
+                visual=self._step_visual(
+                    conversation_id, edited_phase, has_diet, revision=user_message
+                ),
+            ))
+            actions.append(self._action_card(edited_phase, label='항목 수정 반영'))
+        steps.append(self._step_card(
             'delivery',
             response,
-            visual=self._step_visual(
-                conversation_id, 'delivery', has_diet, revision=user_message
-            ),
-        )]
+            visual=self._step_visual(conversation_id, 'delivery', has_diet),
+        ))
+        actions.append(self._action_card('delivery', label='계획 수정 완료'))
         return self._result('', 'delivered', condition, autonomy,
-                            agent_actions=[self._action_card('delivery', label='계획 수정')],
+                            agent_actions=actions,
                             controls=True, post_plan=True, steps=steps)
 
     # ------------------------------------------------------------------ #
@@ -757,7 +769,9 @@ class WorkflowManager:
         return revisions
 
     @staticmethod
-    def _revision_detail(request: str) -> Dict[str, Any]:
+    def _revision_detail(
+        request: str, phase_hint: Optional[str] = None
+    ) -> Dict[str, Any]:
         """Turn a free-text edit into a concise summary and applicable fields."""
         text = re.sub(r'\s+', ' ', (request or '').strip().strip('"\''))
         day_match = re.search(r'(\d{1,2})\s*일차', text)
@@ -770,6 +784,69 @@ class WorkflowManager:
                 'type': 'check_day',
                 'day': day,
                 'summary': f"{day}일차에 컨디션 점검 설정",
+            }
+
+        kcal_match = re.search(r'(\d{3,4})\s*(?:kcal|칼로리)', text, re.IGNORECASE)
+        if '칼로리' in text or kcal_match:
+            if kcal_match:
+                kcal = int(kcal_match.group(1))
+            elif any(word in text for word in ('낮', '줄', '내려')):
+                kcal = 1800
+            elif any(word in text for word in ('높', '늘', '올려')):
+                kcal = 2000
+            else:
+                kcal = 1900
+            return {
+                'type': 'calorie',
+                'kcal': kcal,
+                'summary': f"하루 에너지 목표를 약 {kcal:,}kcal로 조정",
+            }
+
+        macro_pct_match = re.search(
+            r'(단백질|탄수화물|지방)[^\d]{0,10}(\d{1,2})\s*%', text
+        )
+        if macro_pct_match or (
+            any(word in text for word in ('단백질', '탄수화물', '지방'))
+            and any(word in text for word in ('비중', '비율', '높', '늘', '줄', '낮'))
+        ):
+            macros = {'carb': 45, 'protein': 30, 'fat': 25}
+            if macro_pct_match:
+                nutrient, pct_text = macro_pct_match.groups()
+                pct = max(10, min(60, int(pct_text)))
+                if nutrient == '단백질':
+                    macros = {'carb': 100 - pct - 25, 'protein': pct, 'fat': 25}
+                elif nutrient == '탄수화물':
+                    macros = {'carb': pct, 'protein': 100 - pct - 25, 'fat': 25}
+                else:
+                    macros = {'carb': 100 - pct - 30, 'protein': 30, 'fat': pct}
+            elif '단백질' in text and any(word in text for word in ('높', '늘', '올려')):
+                macros = {'carb': 40, 'protein': 35, 'fat': 25}
+            elif '탄수화물' in text and any(word in text for word in ('낮', '줄', '내려')):
+                macros = {'carb': 35, 'protein': 35, 'fat': 30}
+            elif '지방' in text and any(word in text for word in ('낮', '줄', '내려')):
+                macros = {'carb': 45, 'protein': 35, 'fat': 20}
+            return {
+                'type': 'macros',
+                'macros': macros,
+                'summary': (
+                    f"영양 비율을 탄수화물 {macros['carb']}% · "
+                    f"단백질 {macros['protein']}% · 지방 {macros['fat']}%로 조정"
+                ),
+            }
+
+        weekdays = []
+        weekday_pattern = (
+            r'(?<![가-힣])([월화수목금토일])(?:요일)?'
+            r'(?=[·,\s/&]|$|으로|로|을|를|은|는)'
+        )
+        for weekday in re.findall(weekday_pattern, text):
+            if weekday not in weekdays:
+                weekdays.append(weekday)
+        if '휴식' in text and weekdays and not day:
+            return {
+                'type': 'rest_days',
+                'weekdays': weekdays,
+                'summary': f"{'·'.join(weekdays)}요일을 휴식일로 설정",
             }
 
         exercise_kind = None
@@ -803,16 +880,113 @@ class WorkflowManager:
                 'summary': summary,
             }
 
-        if any(word in text for word in ('취침', '기상', '수면')):
-            times = re.findall(r'(?:오전|오후)?\s*\d{1,2}(?::\d{2})?', text)
-            detail = ' · '.join(t.strip() for t in times[:2])
+        if phase_hint == 'sleep' or any(
+            word in text for word in ('취침', '기상', '수면', '카페인', '생활습관')
+        ):
+            bedtime = None
+            waketime = None
+            bed_match = re.search(
+                r'취침(?:\s*시간)?(?:을|은|:)?\s*((?:오전|오후)?\s*\d{1,2}(?::\d{2})?(?:시)?)',
+                text,
+            )
+            wake_match = re.search(
+                r'기상(?:\s*시간)?(?:을|은|:)?\s*((?:오전|오후)?\s*\d{1,2}(?::\d{2})?(?:시)?)',
+                text,
+            )
+            if bed_match:
+                bedtime = WorkflowManager._normalize_time(bed_match.group(1))
+            if wake_match:
+                waketime = WorkflowManager._normalize_time(wake_match.group(1))
+            details = []
+            if bedtime:
+                details.append(f"취침 {bedtime}")
+            if waketime:
+                details.append(f"기상 {waketime}")
+            if not bedtime and not waketime:
+                tip = (
+                    '취침 8시간 전부터 카페인 음료 피하기'
+                    if '카페인' in text
+                    else '취침 전 가벼운 스트레칭과 조명 낮추기'
+                )
+                return {
+                    'type': 'sleep_tip',
+                    'tip': tip,
+                    'summary': f"생활습관 팁을 '{tip}'로 변경",
+                }
+            detail_text = f": {' · '.join(details)}" if details else ''
             return {
                 'type': 'sleep',
-                'summary': f"수면 시간 조정{f': {detail}' if detail else ''}",
+                'bedtime': bedtime,
+                'waketime': waketime,
+                'summary': f"수면 시간 조정{detail_text}",
             }
 
-        if any(word in text for word in ('장보기', '두부', '연어', '품목', '재료')):
-            return {'type': 'grocery', 'summary': '요청한 식재료 기준으로 장보기 품목 조정'}
+        grocery_change = any(word in text for word in ('빼', '제외', '삭제', '추가', '넣'))
+        grocery_context = any(word in text for word in ('장보기', '품목', '재료'))
+        if phase_hint == 'grocery' or (
+            phase_hint != 'meal' and (grocery_context or grocery_change)
+        ):
+            remove_match = re.search(
+                r'([가-힣A-Za-z0-9]+?)(?:을|를)?\s*(?:빼|제외|삭제)',
+                text,
+            )
+            add_match = re.search(
+                r'([가-힣A-Za-z0-9]+?)(?:을|를)?\s*(?:추가|넣)',
+                text,
+            )
+            remove_item = remove_match.group(1) if remove_match else None
+            add_item = add_match.group(1) if add_match else None
+            if remove_item and not add_item:
+                after_remove = re.search(
+                    r'(?:빼고|제외하고)\s*([가-힣A-Za-z0-9]+?)(?:으로|로|을|를|\s)',
+                    text,
+                )
+                add_item = after_remove.group(1) if after_remove else None
+            changes = []
+            if remove_item:
+                changes.append(f"{remove_item} 제외")
+            if add_item:
+                changes.append(f"{add_item} 추가")
+            return {
+                'type': 'grocery',
+                'remove': remove_item,
+                'add': add_item,
+                'summary': ' · '.join(changes) or '요청한 식재료 기준으로 장보기 품목 조정',
+            }
+
+        meal_target = next(
+            (meal for meal in ('아침', '점심', '저녁', '간식') if meal in text),
+            None,
+        )
+        if phase_hint == 'meal' or meal_target or any(
+            word in text for word in ('저탄수', '식단', '끼니', '메뉴')
+        ):
+            if '저탄수' in text or ('탄수' in text and any(word in text for word in ('줄', '낮'))):
+                return {
+                    'type': 'meal',
+                    'mode': 'low_carb',
+                    'summary': '탄수화물 양을 줄이고 단백질·채소 중심으로 식단 조정',
+                }
+            if meal_target and any(word in text for word in ('가볍', '줄', '적게')):
+                return {
+                    'type': 'meal',
+                    'target': meal_target,
+                    'mode': 'lighter',
+                    'summary': f"{meal_target}을 가벼운 구성으로 변경",
+                }
+            replacement = re.search(
+                r'([가-힣A-Za-z0-9]+?)(?:\s*대신|\s*말고)\s*([가-힣A-Za-z0-9]+)',
+                text,
+            )
+            return {
+                'type': 'meal',
+                'target': meal_target,
+                'remove': replacement.group(1) if replacement else None,
+                'add': replacement.group(2) if replacement else None,
+                'summary': (
+                    f"{meal_target or '식단'} 메뉴를 요청한 구성으로 변경"
+                ),
+            }
 
         cleaned = re.sub(
             r'(해\s*줘|해주세요|해주셈|바꿔\s*줘|바꿔주세요|수정해\s*줘|'
@@ -828,10 +1002,66 @@ class WorkflowManager:
         }
 
     def _revision_details(self, conversation_id: int) -> List[Dict[str, Any]]:
-        return [
-            self._revision_detail(request)
-            for request in self._revision_requests(conversation_id)
-        ]
+        details = []
+        for state in self.db_manager.get_workflow_history(conversation_id):
+            if state.get('intervention_type') not in ('modify', 'override'):
+                continue
+            request = (state.get('user_input') or '').strip()
+            if not request:
+                continue
+            stage = state.get('stage')
+            phase_hint = stage if stage in self.PIPELINE else None
+            detail = self._revision_detail(request, phase_hint=phase_hint)
+            if detail not in details:
+                details.append(detail)
+        return details
+
+    @staticmethod
+    def _revision_phase(revision: Dict[str, Any]) -> str:
+        return {
+            'calorie': 'calc',
+            'macros': 'calc',
+            'meal': 'meal',
+            'exercise': 'schedule' if revision.get('day') else 'workout',
+            'rest_days': 'workout',
+            'sleep': 'sleep',
+            'sleep_tip': 'sleep',
+            'check_day': 'schedule',
+            'grocery': 'grocery',
+        }.get(revision.get('type'), 'delivery')
+
+    @staticmethod
+    def _normalize_time(value: str) -> Optional[str]:
+        match = re.search(r'(오전|오후)?\s*(\d{1,2})(?::(\d{2}))?', value or '')
+        if not match:
+            return None
+        period, hour_text, minute_text = match.groups()
+        hour = int(hour_text)
+        minute = int(minute_text or 0)
+        if period == '오후' and hour < 12:
+            hour += 12
+        if period == '오전' and hour == 12:
+            hour = 0
+        if hour > 23 or minute > 59:
+            return None
+        return f"{hour:02d}:{minute:02d}"
+
+    def _sleep_plan(self, conversation_id: int) -> Dict[str, str]:
+        bedtime = '23:30'
+        waketime = '07:00'
+        for detail in self._revision_details(conversation_id):
+            if detail['type'] == 'sleep':
+                bedtime = detail.get('bedtime') or bedtime
+                waketime = detail.get('waketime') or waketime
+        bed_hour, bed_minute = (int(part) for part in bedtime.split(':'))
+        wake_hour, wake_minute = (int(part) for part in waketime.split(':'))
+        bed_total = bed_hour * 60 + bed_minute
+        wake_total = wake_hour * 60 + wake_minute
+        duration_minutes = (wake_total - bed_total) % (24 * 60)
+        hours = duration_minutes // 60
+        minutes = duration_minutes % 60
+        duration = f"약 {hours}시간" + (f" {minutes}분" if minutes else '')
+        return {'bedtime': bedtime, 'waketime': waketime, 'duration': duration}
 
     # Per-phase quick-edit menu shown when the control group clicks '이 항목 수정'.
     MODIFY_MENUS = {
@@ -888,7 +1118,10 @@ class WorkflowManager:
     ) -> Optional[Dict[str, Any]]:
         """Structured data the frontend renders as cards / infographics."""
         revision_details = self._revision_details(conversation_id)
-        current_revision = self._revision_detail(revision) if revision else None
+        current_revision = (
+            self._revision_detail(revision, phase_hint=phase)
+            if revision else None
+        )
 
         def revised(visual: Dict[str, Any]) -> Dict[str, Any]:
             if current_revision:
@@ -896,7 +1129,12 @@ class WorkflowManager:
             return visual
 
         if phase == 'calc':
-            m = self.MACROS
+            m = dict(self.MACROS)
+            for detail in revision_details:
+                if detail['type'] == 'calorie':
+                    m['kcal'] = detail['kcal']
+                elif detail['type'] == 'macros':
+                    m.update(detail['macros'])
             return revised({
                 'type': 'macros', 'kcal': m['kcal'],
                 'items': [
@@ -907,27 +1145,70 @@ class WorkflowManager:
                 'extras': [{'label': '수분', 'value': '1.5~2L'}],
             })
         if phase == 'meal':
-            return revised({'type': 'cards', 'title': '하루 식단 예시', 'cards': [
+            cards = [
                 {'emoji': '🥣', 'title': '아침', 'body': '그릭요거트 + 베리 + 견과'},
                 {'emoji': '🍱', 'title': '점심', 'body': '현미밥 + 닭가슴살(또는 두부) + 샐러드'},
                 {'emoji': '🥗', 'title': '저녁', 'body': '채소볶음 + 미역국 + 잡곡밥'},
                 {'emoji': '🍎', 'title': '간식', 'body': '방울토마토, 삶은 달걀'},
-            ]})
+            ]
+            for detail in revision_details:
+                if detail['type'] != 'meal':
+                    continue
+                if detail.get('mode') == 'low_carb':
+                    cards[0]['body'] = '그릭요거트 + 삶은 달걀 + 베리'
+                    cards[1]['body'] = '현미밥 반 공기 + 닭가슴살(또는 두부) + 채소'
+                    cards[2]['body'] = '두부·닭가슴살 샐러드 + 채소 수프'
+                elif detail.get('mode') == 'lighter' and detail.get('target'):
+                    lighter = {
+                        '아침': '그릭요거트 + 베리',
+                        '점심': '현미밥 반 공기 + 단백질 샐러드',
+                        '저녁': '두부 샐러드 + 채소 수프',
+                        '간식': '방울토마토 또는 무가당 요거트',
+                    }
+                    for card in cards:
+                        if card['title'] == detail['target']:
+                            card['body'] = lighter[detail['target']]
+                elif detail.get('remove') and detail.get('add'):
+                    targets = [
+                        card for card in cards
+                        if not detail.get('target') or card['title'] == detail['target']
+                    ]
+                    for card in targets:
+                        card['body'] = card['body'].replace(
+                            detail['remove'], detail['add']
+                        )
+            return revised({'type': 'cards', 'title': '하루 식단 예시', 'cards': cards})
         if phase == 'workout':
             context = self._exercise_context(conversation_id)
             exercise_revisions = [
-                item for item in revision_details if item['type'] == 'exercise'
+                item for item in revision_details
+                if item['type'] == 'exercise' and not item.get('day')
             ]
             if exercise_revisions:
                 latest_exercise = exercise_revisions[-1]
                 context['preference'] = latest_exercise['label']
-            exercise_types = [
-                context['preference'],
-                '전신 근력',
-                '빠르게 걷기·가벼운 유산소',
-                '회복 스트레칭',
-                '근력과 유산소 혼합',
-            ]
+                duration_match = re.search(r'(\d{1,3})분', latest_exercise['label'])
+                if duration_match:
+                    context['duration'] = int(duration_match.group(1))
+            rest_days = []
+            for detail in revision_details:
+                if detail['type'] == 'rest_days':
+                    rest_days = detail['weekdays']
+            if rest_days:
+                context['availability'] = [
+                    slot for slot in context['availability']
+                    if slot['day'] not in rest_days
+                ]
+            if exercise_revisions:
+                exercise_types = [context['preference']] * 5
+            else:
+                exercise_types = [
+                    context['preference'],
+                    '전신 근력',
+                    '빠르게 걷기·가벼운 유산소',
+                    '회복 스트레칭',
+                    '근력과 유산소 혼합',
+                ]
             cards = [{
                 'emoji': '📌',
                 'title': '현재 루틴 반영',
@@ -936,6 +1217,12 @@ class WorkflowManager:
                     f"{context['duration']}분부터 시작"
                 ),
             }]
+            if rest_days:
+                cards.append({
+                    'emoji': '🧘',
+                    'title': '휴식일',
+                    'body': f"{'·'.join(rest_days)}요일은 회복과 가벼운 스트레칭",
+                })
             for index, slot in enumerate(context['availability']):
                 cards.append({
                     'emoji': '🏃' if index % 2 else '🏋️',
@@ -948,19 +1235,34 @@ class WorkflowManager:
                 'cards': cards,
             })
         if phase == 'sleep':
+            sleep = self._sleep_plan(conversation_id)
+            tips = ['취침 1시간 전 스크린 줄이기', '오후 2시 이후 카페인 자제',
+                    '기상 후 물 한 잔', '하루 10분 산책으로 스트레스 관리']
+            sleep_tip_revisions = [
+                detail for detail in revision_details
+                if detail['type'] == 'sleep_tip'
+            ]
+            if sleep_tip_revisions:
+                tips[1] = sleep_tip_revisions[-1]['tip']
             return revised({
-                'type': 'sleep', 'bedtime': '23:30', 'waketime': '07:00', 'duration': '약 7.5시간',
-                'tips': ['취침 1시간 전 스크린 줄이기', '오후 2시 이후 카페인 자제',
-                         '기상 후 물 한 잔', '하루 10분 산책으로 스트레스 관리'],
+                'type': 'sleep',
+                'bedtime': sleep['bedtime'],
+                'waketime': sleep['waketime'],
+                'duration': sleep['duration'],
+                'tips': tips,
             })
         if phase == 'schedule':
             exercise = self._exercise_context(conversation_id)
             active_days = {item['day'] for item in exercise['availability']}
+            rest_days = set()
+            for detail in revision_details:
+                if detail['type'] == 'rest_days':
+                    rest_days = set(detail['weekdays'])
             weekdays = ['월', '화', '수', '목', '금', '토', '일']
             days = []
             for d in range(1, 15):
                 weekday = weekdays[(d - 1) % 7]
-                if weekday not in active_days:
+                if weekday not in active_days or weekday in rest_days:
                     kind = 'rest'
                 else:
                     kind = 'strength' if d % 2 else 'cardio'
@@ -971,7 +1273,7 @@ class WorkflowManager:
                 item for item in revision_details if item['type'] == 'check_day'
             ]
             if check_revisions:
-                check_days = {item['day'] for item in check_revisions}
+                check_days = {check_revisions[-1]['day']}
                 for item in days:
                     item['tag'] = '컨디션 점검' if item['day'] in check_days else ''
 
@@ -983,19 +1285,20 @@ class WorkflowManager:
                     target = days[change['day'] - 1]
                     target['kind'] = change['kind']
                     target['label'] = change['label']
+            sleep = self._sleep_plan(conversation_id)
             return revised({
                 'type': 'calendar',
-                'sleep_summary': '매일 취침 23:30 · 기상 07:00 (약 7.5시간)',
+                'sleep_summary': (
+                    f"매일 취침 {sleep['bedtime']} · 기상 {sleep['waketime']} "
+                    f"({sleep['duration']})"
+                ),
                 'diet_summary': (self._diet_strategy(conversation_id)
                                  if has_diet else ''),
                 'days': days,
             })
         if phase == 'grocery':
-            return revised({
-                'type': 'grocery',
-                'title': '2주 장보기 리스트와 예상 예산',
-                'weeks': [
-                    {
+            weeks = [
+                {
                         'label': '1주차',
                         'budget': '약 55,000~65,000원',
                         'cards': [
@@ -1004,8 +1307,8 @@ class WorkflowManager:
                             {'emoji': '🍚', 'title': '탄수화물', 'body': '현미 1kg, 고구마 5개, 통밀빵 1봉'},
                             {'emoji': '🥜', 'title': '기타', 'body': '견과류, 올리브유, 냉동 베리'},
                         ],
-                    },
-                    {
+                },
+                {
                         'label': '2주차',
                         'budget': '약 60,000~72,000원',
                         'cards': [
@@ -1014,8 +1317,29 @@ class WorkflowManager:
                             {'emoji': '🌾', 'title': '탄수화물', 'body': '오트밀 1봉, 잡곡 1kg, 단호박 1개'},
                             {'emoji': '🍊', 'title': '기타', 'body': '무가당 두유, 제철 과일, 플레인 요거트'},
                         ],
-                    },
-                ],
+                },
+            ]
+            for detail in revision_details:
+                if detail['type'] != 'grocery':
+                    continue
+                remove_item = detail.get('remove')
+                add_item = detail.get('add')
+                if remove_item:
+                    for week in weeks:
+                        for card in week['cards']:
+                            items = [
+                                item.strip() for item in card['body'].split(',')
+                                if remove_item not in item
+                            ]
+                            card['body'] = ', '.join(items)
+                if add_item:
+                    protein_card = weeks[0]['cards'][0]
+                    if add_item not in protein_card['body']:
+                        protein_card['body'] += f", {add_item}"
+            return revised({
+                'type': 'grocery',
+                'title': '2주 장보기 리스트와 예상 예산',
+                'weeks': weeks,
                 'total_budget': '2주 총예산 약 115,000~137,000원',
                 'budget_note': '일반 대형마트 기준의 예상치이며 지역·브랜드·보유 식재료에 따라 달라질 수 있어요.',
             })
@@ -1032,7 +1356,12 @@ class WorkflowManager:
                 'title': '운동',
                 'body': f"{exercise['level']}을 고려해 {days}요일, 회당 약 {exercise['duration']}분",
             })
-            cards.append({'emoji': '😴', 'title': '수면', 'body': '취침 23:30 · 기상 07:00'})
+            sleep = self._sleep_plan(conversation_id)
+            cards.append({
+                'emoji': '😴',
+                'title': '수면',
+                'body': f"취침 {sleep['bedtime']} · 기상 {sleep['waketime']}",
+            })
             visual = {
                 'type': 'summary', 'title': '2주 건강 루틴 요약', 'cards': cards,
                 'safety': '무리한 절식·과한 운동은 피하고, 어지럼증 등 이상이 느껴지면 강도를 낮추세요. '

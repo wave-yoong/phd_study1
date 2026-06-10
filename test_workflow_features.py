@@ -110,10 +110,14 @@ class WorkflowFeatureTests(unittest.TestCase):
         result = self.manager.process_message(
             conversation_id, '3일차 운동을 요가 20분으로 바꿔줘'
         )
-        visual = result['steps'][0]['visual']
+        schedule_visual = result['steps'][0]['visual']
+        visual = result['steps'][1]['visual']
 
         self.assertTrue(result['post_plan'])
         self.assertEqual(result['stage'], 'delivered')
+        self.assertEqual(schedule_visual['type'], 'calendar')
+        self.assertEqual(schedule_visual['days'][2]['kind'], 'mobility')
+        self.assertEqual(schedule_visual['days'][2]['label'], '요가 20분')
         self.assertIn(
             '3일차 운동을 요가 20분으로 변경',
             visual['revisions'],
@@ -123,7 +127,7 @@ class WorkflowFeatureTests(unittest.TestCase):
         )
         self.assertIn('요가 20분', revision_card['body'])
         self.assertNotIn('바꿔줘', revision_card['body'])
-        self.assertNotIn('바꿔줘', result['steps'][0]['content'])
+        self.assertNotIn('바꿔줘', result['steps'][1]['content'])
 
         schedule = self.manager._step_visual(
             conversation_id, 'schedule', has_diet=True
@@ -182,6 +186,133 @@ class WorkflowFeatureTests(unittest.TestCase):
 
         self.assertEqual(result['steps'][0]['content'], '')
         self.assertEqual(result['steps'][0]['visual']['type'], 'grocery')
+
+    def test_all_quick_edit_examples_change_their_visual_data(self):
+        conversation_id = self._seed_weight_profile()
+
+        self.db.add_workflow_state(
+            conversation_id=conversation_id,
+            stage='calc',
+            user_input='칼로리를 조금 낮춰줘',
+            gpt_response='수정됨',
+            intervention_type='modify',
+            autonomy_level='low',
+        )
+        self.db.add_workflow_state(
+            conversation_id=conversation_id,
+            stage='calc',
+            user_input='단백질 비중을 높여줘',
+            gpt_response='수정됨',
+            intervention_type='modify',
+            autonomy_level='low',
+        )
+        calc = self.manager._step_visual(conversation_id, 'calc')
+        macros = {item['label']: item['pct'] for item in calc['items']}
+        self.assertEqual(calc['kcal'], 1800)
+        self.assertEqual(macros['단백질'], 35)
+
+        self.db.add_workflow_state(
+            conversation_id=conversation_id,
+            stage='calc',
+            user_input='단백질을 40%로 맞춰줘',
+            gpt_response='수정됨',
+            intervention_type='modify',
+            autonomy_level='low',
+        )
+        calc = self.manager._step_visual(conversation_id, 'calc')
+        macros = {item['label']: item['pct'] for item in calc['items']}
+        self.assertEqual(macros['단백질'], 40)
+        self.assertEqual(sum(macros.values()), 100)
+
+        self.db.add_workflow_state(
+            conversation_id=conversation_id,
+            stage='meal',
+            user_input='저녁을 더 가볍게 바꿔줘',
+            gpt_response='수정됨',
+            intervention_type='modify',
+            autonomy_level='low',
+        )
+        meal = self.manager._step_visual(conversation_id, 'meal')
+        dinner = next(card for card in meal['cards'] if card['title'] == '저녁')
+        self.assertIn('두부 샐러드', dinner['body'])
+
+        self.db.add_workflow_state(
+            conversation_id=conversation_id,
+            stage='workout',
+            user_input='휴식일을 토·일로 바꿔줘',
+            gpt_response='수정됨',
+            intervention_type='modify',
+            autonomy_level='low',
+        )
+        workout = self.manager._step_visual(conversation_id, 'workout')
+        schedule = self.manager._step_visual(conversation_id, 'schedule')
+        rest_card = next(card for card in workout['cards'] if card['title'] == '휴식일')
+        self.assertIn('토·일요일', rest_card['body'])
+        self.assertEqual(schedule['days'][5]['kind'], 'rest')
+        self.assertEqual(schedule['days'][6]['kind'], 'rest')
+
+        self.db.add_workflow_state(
+            conversation_id=conversation_id,
+            stage='sleep',
+            user_input='취침을 23:00, 기상은 06:30으로 바꿔줘',
+            gpt_response='수정됨',
+            intervention_type='modify',
+            autonomy_level='low',
+        )
+        sleep = self.manager._step_visual(conversation_id, 'sleep')
+        schedule = self.manager._step_visual(conversation_id, 'schedule')
+        self.assertEqual(sleep['bedtime'], '23:00')
+        self.assertEqual(sleep['waketime'], '06:30')
+        self.assertIn('취침 23:00', schedule['sleep_summary'])
+        self.assertIn('기상 06:30', schedule['sleep_summary'])
+
+        self.db.add_workflow_state(
+            conversation_id=conversation_id,
+            stage='sleep',
+            user_input='카페인 관련 팁을 바꿔줘',
+            gpt_response='수정됨',
+            intervention_type='modify',
+            autonomy_level='low',
+        )
+        sleep = self.manager._step_visual(conversation_id, 'sleep')
+        self.assertIn('취침 8시간 전', sleep['tips'][1])
+
+        self.db.add_workflow_state(
+            conversation_id=conversation_id,
+            stage='grocery',
+            user_input='두부를 빼고 연어를 추가해줘',
+            gpt_response='수정됨',
+            intervention_type='modify',
+            autonomy_level='low',
+        )
+        grocery = self.manager._step_visual(conversation_id, 'grocery')
+        first_week = ' '.join(
+            card['body'] for card in grocery['weeks'][0]['cards']
+        )
+        self.assertNotIn('두부', first_week)
+        self.assertIn('연어', first_week)
+
+    def test_post_plan_sleep_edit_returns_updated_sleep_card(self):
+        conversation_id = self._seed_weight_profile()
+        self.db.add_workflow_state(
+            conversation_id=conversation_id,
+            stage='delivered',
+            gpt_response='초기 계획',
+            autonomy_level='low',
+        )
+
+        result = self.manager.process_message(
+            conversation_id, '취침을 22:30으로 바꿔줘'
+        )
+
+        self.assertEqual(result['steps'][0]['visual']['type'], 'sleep')
+        self.assertEqual(result['steps'][0]['visual']['bedtime'], '22:30')
+        self.assertEqual(result['steps'][1]['visual']['type'], 'summary')
+        sleep_card = next(
+            card for card in result['steps'][1]['visual']['cards']
+            if card['title'] == '수면'
+        )
+        self.assertIn('취침 22:30', sleep_card['body'])
 
     def test_control_autonomous_finish_still_offers_final_edit(self):
         conversation_id = self._seed_habit_profile()
