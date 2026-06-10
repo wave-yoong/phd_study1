@@ -399,16 +399,21 @@ class WorkflowManager:
             tool_name=meta['tool'], intervention_type=intervention, autonomy_level=autonomy
         )
         actions = [self._action_card(phase)]
-        controls = (condition == 'control') and not is_last
+        is_control = (condition == 'control')
+        controls = is_control and not is_last
         has_diet = 'meal' in self._pipeline(conversation_id)
         steps = [self._step_card(phase, response, visual=self._step_visual(conversation_id, phase, has_diet))]
-        approval_prompt = meta['approve'] if (condition == 'control' and not is_last) else None
+        approval_prompt = meta['approve'] if (is_control and not is_last) else None
+        modify_options = self._modify_options(phase) if (is_control and not is_last) else None
         # The step card carries the content; keep the message body empty to avoid
-        # duplicating it. For the final plan, add a short confirmation note.
-        note = '계획이 완성됐습니다. 특정 항목을 바꾸고 싶으면 알려주세요.' if is_last else ''
+        # duplicating it.
+        note = ''
+        # On the final plan, the control group can still edit items afterwards.
         return self._result(note, stage, condition, autonomy,
                             agent_actions=actions, controls=controls,
-                            steps=steps, approval_prompt=approval_prompt)
+                            steps=steps, approval_prompt=approval_prompt,
+                            modify_options=modify_options,
+                            post_plan=(is_control and is_last))
 
     def _run_pipeline(
         self, conversation_id: int, condition: str, start_phase: str,
@@ -534,10 +539,12 @@ class WorkflowManager:
             user_input=user_message, gpt_response=response,
             tool_name=meta['tool'], intervention_type='question', autonomy_level='low'
         )
-        approval = meta['approve'] if condition == 'control' else None
+        is_control = (condition == 'control')
+        approval = meta['approve'] if is_control else None
         return self._result(response, stage, condition, 'low',
-                            agent_actions=[], controls=(condition == 'control'),
-                            approval_prompt=approval)
+                            agent_actions=[], controls=is_control,
+                            approval_prompt=approval,
+                            modify_options=self._modify_options(stage) if is_control else None)
 
     def _handle_paused(
         self, conversation_id: int, condition: str, autonomy: str,
@@ -632,6 +639,25 @@ class WorkflowManager:
         answers = user_msgs[1:1 + self.INTAKE_SPAN]
         return ' / '.join(a for a in answers if a)
 
+    # Per-phase quick-edit menu shown when the control group clicks '이 항목 수정'.
+    MODIFY_MENUS = {
+        'calc': [('칼로리 목표 조정', '예: 칼로리를 조금 낮춰줘'),
+                 ('영양 비율 조정', '예: 단백질 비중을 높여줘')],
+        'meal': [('특정 끼니 바꾸기', '예: 저녁을 더 가볍게 바꿔줘'),
+                 ('식단 방향 바꾸기', '예: 저탄수 위주로 바꿔줘')],
+        'workout': [('운동 종류 바꾸기', '예: 근력 대신 요가로 바꿔줘'),
+                    ('휴식일 바꾸기', '예: 휴식일을 토·일로 바꿔줘')],
+        'sleep': [('취침/기상 시간 바꾸기', '예: 취침을 23:00으로 바꿔줘'),
+                  ('추천 생활습관 바꾸기', '예: 카페인 관련 팁을 바꿔줘')],
+        'schedule': [('특정 날짜 바꾸기', '예: 3일차 운동을 요가로 바꿔줘')],
+        'grocery': [('품목 추가/삭제', '예: 두부를 빼고 연어를 추가해줘')],
+    }
+
+    def _modify_options(self, phase: str) -> List[Dict[str, str]]:
+        items = [{'label': l, 'placeholder': p} for l, p in self.MODIFY_MENUS.get(phase, [])]
+        items.append({'label': '기타 (직접 입력)', 'placeholder': '바꾸고 싶은 내용을 자유롭게 입력하세요'})
+        return items
+
     def _action_card(self, phase: str, label: Optional[str] = None) -> Dict[str, str]:
         meta = self.TOOL_META[phase]
         return {
@@ -722,7 +748,11 @@ class WorkflowManager:
                 cards.append({'emoji': '🍽️', 'title': '식단', 'body': '하루 약 1,900kcal 균형식'})
             cards.append({'emoji': '💪', 'title': '운동', 'body': '주 5일 (근력+유산소), 수·일 휴식'})
             cards.append({'emoji': '😴', 'title': '수면', 'body': '취침 23:30 · 기상 07:00'})
-            return {'type': 'summary', 'title': '2주 건강 루틴 요약', 'cards': cards}
+            return {
+                'type': 'summary', 'title': '2주 건강 루틴 요약', 'cards': cards,
+                'safety': '무리한 절식·과한 운동은 피하고, 어지럼증 등 이상이 느껴지면 강도를 낮추세요. '
+                          '지속 가능한 습관이 가장 중요하며, 지병이 있다면 전문가와 상담하세요.',
+            }
         return None
 
     def _classify_intent(self, user_message: str) -> str:
@@ -766,7 +796,8 @@ class WorkflowManager:
         widget: Optional[Dict[str, Any]] = None,
         steps: Optional[List[Dict[str, str]]] = None,
         approval_prompt: Optional[str] = None,
-        intake_icon: Optional[str] = None
+        intake_icon: Optional[str] = None,
+        modify_options: Optional[List[Dict[str, str]]] = None
     ) -> Dict[str, Any]:
         return {
             'response': response,
@@ -783,5 +814,6 @@ class WorkflowManager:
             'steps': steps,
             'approval_prompt': approval_prompt,
             'intake_icon': intake_icon,
+            'modify_options': modify_options,
             'awaiting_input': stage not in ('closed',),
         }

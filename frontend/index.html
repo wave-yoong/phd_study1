@@ -334,6 +334,7 @@
         }
         
         .input-group.hidden { display: none; }
+        .modify-menu { margin-top: 8px; }
 
         .input-group {
             display: flex;
@@ -573,6 +574,14 @@
         .summary-card .info-emoji { background: #e7f7f0; }
         .info-title { font-weight: 700; font-size: 13px; color: #202123; margin-bottom: 2px; }
         .info-body { font-size: 13px; color: #4b5563; line-height: 1.45; }
+
+        .safety-box {
+            display: flex; gap: 10px; align-items: flex-start;
+            margin-top: 12px; padding: 12px 14px;
+            background: #fef2f2; border: 1px solid #fecaca; border-left: 4px solid #ef4444;
+            border-radius: 10px; font-size: 13px; line-height: 1.55; color: #b91c1c;
+        }
+        .safety-icon { font-size: 16px; flex-shrink: 0; }
 
         .sleep-clock {
             display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
@@ -838,8 +847,8 @@
     
     <script>
         // Bump this whenever the UI changes so we can confirm the running build.
-        const BUILD = 'wellness-build-12 · card visuals';
-        const EXPECTED_SERVER_BUILD = 'wellness-build-12';
+        const BUILD = 'wellness-build-13 · auto-fix+modify-menu+safety';
+        const EXPECTED_SERVER_BUILD = 'wellness-build-13';
         console.log('[study] UI ' + BUILD);
         window.addEventListener('DOMContentLoaded', () => {
             const t = document.getElementById('buildTag');
@@ -894,11 +903,14 @@
 
         // The chat input is hidden by default and only revealed when the user picks
         // a free-text option ('기타 (직접 입력)' / '이 항목 수정' 등).
-        function showChatInput() {
+        function showChatInput(placeholder) {
             const g = document.getElementById('queryInput');
             if (g) g.classList.remove('hidden');
             const i = document.getElementById('userInput');
-            if (i) i.focus();
+            if (i) {
+                if (placeholder) i.placeholder = placeholder;
+                i.focus();
+            }
         }
         function hideChatInput() {
             const g = document.getElementById('queryInput');
@@ -957,6 +969,7 @@
                     <div class="viz">
                         ${visual.title ? `<div class="viz-title">${escapeHtml(visual.title)}</div>` : ''}
                         <div class="info-grid">${cards}</div>
+                        ${visual.safety ? `<div class="safety-box"><span class="safety-icon">⚠️</span><span><b>안전 안내</b><br>${escapeHtml(visual.safety)}</span></div>` : ''}
                     </div>`;
             }
             if (visual.type === 'sleep') {
@@ -1059,7 +1072,26 @@
             });
         }
 
-        function renderChoices(container, choices) {
+        // When the user picks '이 항목 수정', offer phase-specific quick-edit options;
+        // each opens the input with a tailored example placeholder.
+        function renderModifyMenu(container, options) {
+            const panel = document.createElement('div');
+            panel.className = 'choice-panel modify-menu';
+            options.forEach(opt => {
+                const b = document.createElement('button');
+                b.type = 'button';
+                b.className = 'choice-item';
+                b.innerHTML = `<span class="choice-index">✏️</span><span class="choice-label">${escapeHtml(opt.label)}</span>`;
+                b.addEventListener('click', () => {
+                    if (b.disabled) return;
+                    showChatInput(opt.placeholder || '바꾸고 싶은 내용을 입력하세요');
+                });
+                panel.appendChild(b);
+            });
+            container.appendChild(panel);
+        }
+
+        function renderChoices(container, choices, modifyOptions) {
             if (!Array.isArray(choices) || choices.length === 0) {
                 return;
             }
@@ -1098,7 +1130,11 @@
 
                     const value = (choice.value || '').trim();
                     if (!value) {
-                        showChatInput();
+                        if (choice.id === 'modify' && Array.isArray(modifyOptions) && modifyOptions.length) {
+                            renderModifyMenu(container, modifyOptions);
+                        } else {
+                            showChatInput();
+                        }
                         return;
                     }
 
@@ -1367,7 +1403,12 @@
                 renderSleepTimeWidget(messageDiv, data.widget);
             }
 
-            renderChoices(messageDiv, getRenderableChoices(data));
+            renderChoices(messageDiv, getRenderableChoices(data), data.modify_options);
+
+            // Show the free-text box by default when the finished plan can be edited.
+            if (data.show_input) {
+                showChatInput(data.input_placeholder || '');
+            }
             scrollToBottom();
         }
 

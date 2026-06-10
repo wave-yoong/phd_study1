@@ -41,16 +41,19 @@ class MockGPTService:
         if override_instruction and override_instruction.startswith('__QUESTION__'):
             return self._explain(phase)
 
-        def finish(body, auto_tail, ctrl_tail):
-            # In the control group a "modify" request arrives as override_instruction;
-            # reflect it so the change is visibly applied (demo mode is otherwise fixed).
+        def finish(body, auto_tail=None, ctrl_tail=None):
+            # A 'modify' request arrives as override_instruction; reflect it so the
+            # change is visibly applied (demo mode is otherwise fixed; the real LLM
+            # actually answers the user's request).
             if override_instruction:
                 return (
-                    f"요청을 반영해 수정했습니다.\n반영 내용: {override_instruction}\n\n"
+                    f"요청하신 내용을 반영했어요: \"{override_instruction}\"\n\n"
                     + body
-                    + "\n\n위 내용에 요청하신 부분을 반영했어요. 이대로 진행할까요, 더 바꿀 부분이 있나요?"
+                    + "\n\n요청을 반영했어요. 이대로 진행할까요, 더 바꿀 부분이 있나요?"
                 )
-            return body + ("\n\n" + auto_tail if is_auto else "\n\n" + ctrl_tail)
+            # No step-transition tail: the autonomous group should not look like it
+            # is asking to proceed, and the control group asks via the approval box.
+            return body
 
         if phase == 'intake':
             return (
@@ -84,20 +87,17 @@ class MockGPTService:
                           "수면 시간대나 생활습관을 조정하고 싶으면 말씀해 주세요.")
 
         if phase == 'schedule':
-            body = "운동일과 휴식일을 균형 있게 배치해 2주 일정을 편성했어요. (수면·식단은 매일 공통)"
-            return finish(body, "이대로 장보기 리스트까지 만들게요.",
-                          "특정 날짜를 바꾸고 싶으면 'N일차 ...' 형태로 말씀해 주세요.")
+            has_diet = goal not in ('수면의 질 개선', '규칙적인 운동 습관 만들기')
+            common = "(수면·식단은 매일 공통)" if has_diet else "(수면은 매일 공통)"
+            body = f"운동일과 휴식일을 균형 있게 배치해 2주 일정을 편성했어요. {common}"
+            return finish(body)
 
         if phase == 'grocery':
             body = "식단에 맞춰 1주차 장보기 리스트를 만들었어요."
             return finish(body, "루틴을 최종 정리할게요.", "빠진 품목이 있으면 알려주세요.")
 
         if phase == 'delivery':
-            return (
-                "2주 건강 루틴을 정리했어요. 아래 요약을 따라 주시면 됩니다.\n\n"
-                "안전 안내: 무리한 절식은 피하고, 어지럼증 등 이상이 있으면 강도를 낮추세요. "
-                "지속 가능한 습관이 가장 중요합니다."
-            )
+            return "맞춤형 건강 루틴이 완성되었습니다! 🎉 이번 주부터 저와 함께 건강한 루틴을 만들어가요!"
 
         if phase == 'override':
             return (
