@@ -403,9 +403,10 @@ class WorkflowManager:
         is_control = (condition == 'control')
         controls = is_control and not is_last
         has_diet = 'meal' in self._pipeline(conversation_id)
+        display_response = '' if phase == 'grocery' else response
         steps = [self._step_card(
             phase,
-            response,
+            display_response,
             visual=self._step_visual(
                 conversation_id, phase, has_diet, revision=override_instruction
             ),
@@ -456,7 +457,12 @@ class WorkflowManager:
             )
             working_history.append({'role': 'assistant', 'content': text})
             actions.append(self._action_card(phase))
-            steps.append(self._step_card(phase, text, visual=self._step_visual(conversation_id, phase, has_diet)))
+            display_text = '' if phase == 'grocery' else text
+            steps.append(self._step_card(
+                phase,
+                display_text,
+                visual=self._step_visual(conversation_id, phase, has_diet),
+            ))
             parts.append(f"[{meta['label']}]\n{text}")
 
         closing = ("계획을 모두 확정했습니다. 그대로 따라 주시면 됩니다."
@@ -656,9 +662,17 @@ class WorkflowManager:
         answers = user_msgs[1:1 + self.INTAKE_SPAN]
         return ' / '.join(a for a in answers if a)
 
+    def _all_user_text(self, conversation_id: int) -> str:
+        """Return user-provided context, including intake answers beyond a fixed slice."""
+        msgs = self.db_manager.get_conversation_messages(conversation_id)
+        return ' / '.join(
+            m['content'] for m in msgs
+            if m.get('role') == 'user' and m.get('content')
+        )
+
     def _exercise_context(self, conversation_id: int) -> Dict[str, Any]:
         """Extract exercise availability, current level, and preference from intake."""
-        profile = self._user_profile(conversation_id)
+        profile = self._all_user_text(conversation_id)
         availability: List[Dict[str, str]] = []
         match = re.search(r'운동 가능:\s*([^/]+)', profile)
         if match:
@@ -695,7 +709,8 @@ class WorkflowManager:
             duration = 25
             max_days = 3
         else:
-            level = '현재 루틴 정보 없음'
+            level = ('입력한 운동 가능 일정 확인됨'
+                     if match else '현재 수준에 맞춰 점진적으로 시작')
             duration = 30
             max_days = 4
 
@@ -732,7 +747,7 @@ class WorkflowManager:
         )
 
     def _revision_requests(self, conversation_id: int) -> List[str]:
-        """Collect user edits so later steps and the final summary show them."""
+        """Collect raw user edits for applying them to later plan visuals."""
         revisions = []
         for state in self.db_manager.get_workflow_history(conversation_id):
             if state.get('intervention_type') in ('modify', 'override'):
@@ -740,6 +755,83 @@ class WorkflowManager:
                 if request and request not in revisions:
                     revisions.append(request)
         return revisions
+
+    @staticmethod
+    def _revision_detail(request: str) -> Dict[str, Any]:
+        """Turn a free-text edit into a concise summary and applicable fields."""
+        text = re.sub(r'\s+', ' ', (request or '').strip().strip('"\''))
+        day_match = re.search(r'(\d{1,2})\s*일차', text)
+        day = int(day_match.group(1)) if day_match else None
+        duration_match = re.search(r'(\d{1,3})\s*분', text)
+        duration = f"{duration_match.group(1)}분" if duration_match else ''
+
+        if '점검' in text and day:
+            return {
+                'type': 'check_day',
+                'day': day,
+                'summary': f"{day}일차에 컨디션 점검 설정",
+            }
+
+        exercise_kind = None
+        exercise_label = ''
+        if any(word in text for word in ('휴식', '쉬는 날', '쉬기')):
+            exercise_kind, exercise_label = 'rest', '휴식'
+        elif any(word in text for word in ('요가', '스트레칭')):
+            exercise_kind = 'mobility'
+            exercise_label = '요가' if '요가' in text else '스트레칭'
+        elif any(word in text for word in ('걷기', '유산소', '달리기', '러닝')):
+            exercise_kind = 'cardio'
+            exercise_label = '걷기' if '걷기' in text else '유산소'
+        elif '근력' in text:
+            exercise_kind, exercise_label = 'strength', '근력'
+
+        time_match = re.search(r'(아침|오전|점심|오후|저녁|밤)', text)
+        time_label = time_match.group(1) if time_match else ''
+        if exercise_kind:
+            result_label = ' '.join(
+                part for part in (time_label, exercise_label, duration) if part
+            )
+            if day:
+                summary = f"{day}일차 운동을 {result_label or exercise_label}으로 변경"
+            else:
+                summary = f"운동 구성을 {result_label or exercise_label} 중심으로 변경"
+            return {
+                'type': 'exercise',
+                'day': day,
+                'kind': exercise_kind,
+                'label': result_label or exercise_label,
+                'summary': summary,
+            }
+
+        if any(word in text for word in ('취침', '기상', '수면')):
+            times = re.findall(r'(?:오전|오후)?\s*\d{1,2}(?::\d{2})?', text)
+            detail = ' · '.join(t.strip() for t in times[:2])
+            return {
+                'type': 'sleep',
+                'summary': f"수면 시간 조정{f': {detail}' if detail else ''}",
+            }
+
+        if any(word in text for word in ('장보기', '두부', '연어', '품목', '재료')):
+            return {'type': 'grocery', 'summary': '요청한 식재료 기준으로 장보기 품목 조정'}
+
+        cleaned = re.sub(
+            r'(해\s*줘|해주세요|해주셈|바꿔\s*줘|바꿔주세요|수정해\s*줘|'
+            r'변경해\s*줘|하자|했으면 좋겠어(?:요)?|부탁해(?:요)?)\s*[.!?]*$',
+            '',
+            text,
+        ).strip()
+        if len(cleaned) > 42:
+            cleaned = cleaned[:42].rstrip() + '…'
+        return {
+            'type': 'general',
+            'summary': f"요청한 항목 조정: {cleaned or '세부 설정 변경'}",
+        }
+
+    def _revision_details(self, conversation_id: int) -> List[Dict[str, Any]]:
+        return [
+            self._revision_detail(request)
+            for request in self._revision_requests(conversation_id)
+        ]
 
     # Per-phase quick-edit menu shown when the control group clicks '이 항목 수정'.
     MODIFY_MENUS = {
@@ -795,9 +887,12 @@ class WorkflowManager:
         revision: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
         """Structured data the frontend renders as cards / infographics."""
+        revision_details = self._revision_details(conversation_id)
+        current_revision = self._revision_detail(revision) if revision else None
+
         def revised(visual: Dict[str, Any]) -> Dict[str, Any]:
-            if revision:
-                visual['revision'] = revision
+            if current_revision:
+                visual['revision'] = current_revision['summary']
             return visual
 
         if phase == 'calc':
@@ -820,6 +915,12 @@ class WorkflowManager:
             ]})
         if phase == 'workout':
             context = self._exercise_context(conversation_id)
+            exercise_revisions = [
+                item for item in revision_details if item['type'] == 'exercise'
+            ]
+            if exercise_revisions:
+                latest_exercise = exercise_revisions[-1]
+                context['preference'] = latest_exercise['label']
             exercise_types = [
                 context['preference'],
                 '전신 근력',
@@ -865,6 +966,23 @@ class WorkflowManager:
                     kind = 'strength' if d % 2 else 'cardio'
                 days.append({'day': d, 'kind': kind,
                              'tag': '컨디션 점검' if d in (1, 8, 14) else ''})
+
+            check_revisions = [
+                item for item in revision_details if item['type'] == 'check_day'
+            ]
+            if check_revisions:
+                check_days = {item['day'] for item in check_revisions}
+                for item in days:
+                    item['tag'] = '컨디션 점검' if item['day'] in check_days else ''
+
+            for change in (
+                item for item in revision_details
+                if item['type'] == 'exercise' and item.get('day')
+            ):
+                if 1 <= change['day'] <= len(days):
+                    target = days[change['day'] - 1]
+                    target['kind'] = change['kind']
+                    target['label'] = change['label']
             return revised({
                 'type': 'calendar',
                 'sleep_summary': '매일 취침 23:30 · 기상 07:00 (약 7.5시간)',
@@ -920,7 +1038,7 @@ class WorkflowManager:
                 'safety': '무리한 절식·과한 운동은 피하고, 어지럼증 등 이상이 느껴지면 강도를 낮추세요. '
                           '지속 가능한 습관이 가장 중요하며, 지병이 있다면 전문가와 상담하세요.',
             }
-            revisions = self._revision_requests(conversation_id)
+            revisions = [item['summary'] for item in revision_details]
             if revisions:
                 visual['cards'].append({
                     'emoji': '✏️',

@@ -43,14 +43,10 @@ class MockGPTService:
             return self._explain(phase)
 
         def finish(body, auto_tail=None, ctrl_tail=None):
-            # A 'modify' request arrives as override_instruction; reflect it so the
-            # change is visibly applied (demo mode is otherwise fixed; the real LLM
-            # actually answers the user's request).
             if override_instruction:
                 return (
-                    f"요청하신 내용을 반영했어요: \"{override_instruction}\"\n\n"
+                    "수정한 내용을 새 계획 카드에 반영했어요.\n\n"
                     + body
-                    + "\n\n요청을 반영했어요. 이대로 진행할까요, 더 바꿀 부분이 있나요?"
                 )
             # No step-transition tail: the autonomous group should not look like it
             # is asking to proceed, and the control group asks via the approval box.
@@ -99,25 +95,16 @@ class MockGPTService:
             return finish(body)
 
         if phase == 'grocery':
-            body = (
-                "식단에 맞춰 1주차와 2주차 장보기 리스트를 서로 다르게 구성했어요.\n"
-                "- 1주차 예상 예산: 약 55,000~65,000원\n"
-                "- 2주차 예상 예산: 약 60,000~72,000원\n"
-                "- 2주 총예산: 약 115,000~137,000원\n"
-                "실제 가격은 지역·브랜드·이미 보유한 식재료에 따라 달라질 수 있어요."
-            )
+            body = "식단에 맞춰 1주차와 2주차 장보기 목록을 구성했어요."
             return finish(body, "루틴을 최종 정리할게요.", "빠진 품목이 있으면 알려주세요.")
 
         if phase == 'delivery':
             return "맞춤형 건강 루틴이 완성되었습니다! 🎉 이번 주부터 저와 함께 건강한 루틴을 만들어가요!"
 
         if phase == 'override':
-            request = (override_instruction or user_message).strip()
             return (
-                "수정 요청을 최신 루틴에 반영했습니다.\n"
-                f"- 반영 내용: {request}\n"
-                "- 수정된 항목은 새 계획 카드에 표시했고, 나머지 루틴은 그대로 유지했습니다.\n\n"
-                "추가로 바꾸고 싶은 부분이 있나요?"
+                "수정 요청을 최신 루틴에 반영했습니다. "
+                "변경 결과는 새 계획 카드에서 확인할 수 있어요."
             )
 
         if phase == 'interrupt':

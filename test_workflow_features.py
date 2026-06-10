@@ -115,17 +115,73 @@ class WorkflowFeatureTests(unittest.TestCase):
         self.assertTrue(result['post_plan'])
         self.assertEqual(result['stage'], 'delivered')
         self.assertIn(
-            '3일차 운동을 요가 20분으로 바꿔줘',
+            '3일차 운동을 요가 20분으로 변경',
             visual['revisions'],
         )
         revision_card = next(
             card for card in visual['cards'] if card['title'] == '수정 반영'
         )
         self.assertIn('요가 20분', revision_card['body'])
-        self.assertIn(
-            '3일차 운동을 요가 20분으로 바꿔줘',
-            result['steps'][0]['content'],
+        self.assertNotIn('바꿔줘', revision_card['body'])
+        self.assertNotIn('바꿔줘', result['steps'][0]['content'])
+
+        schedule = self.manager._step_visual(
+            conversation_id, 'schedule', has_diet=True
         )
+        day_three = schedule['days'][2]
+        self.assertEqual(day_three['kind'], 'mobility')
+        self.assertEqual(day_three['label'], '요가 20분')
+
+    def test_check_day_edit_changes_calendar_instead_of_echoing_request(self):
+        conversation_id = self._seed_weight_profile()
+        self.db.add_workflow_state(
+            conversation_id=conversation_id,
+            stage='schedule',
+            user_input='7일차에 점검하자',
+            gpt_response='수정됨',
+            intervention_type='modify',
+            autonomy_level='low',
+        )
+
+        visual = self.manager._step_visual(
+            conversation_id, 'schedule', has_diet=True,
+            revision='7일차에 점검하자',
+        )
+        check_days = [
+            item['day'] for item in visual['days'] if item['tag']
+        ]
+
+        self.assertEqual(check_days, [7])
+        self.assertEqual(visual['revision'], '7일차에 컨디션 점검 설정')
+        self.assertNotIn('하자', visual['revision'])
+
+    def test_exercise_availability_is_recognized_without_level_answer(self):
+        conversation_id = self._seed_weight_profile()
+        for message in ('승인', '계속 진행', '운동 가능 일정은 앞에서 입력했어요'):
+            self.db.add_message(conversation_id, 'user', message)
+
+        context = self.manager._exercise_context(conversation_id)
+        visual = self.manager._step_visual(
+            conversation_id, 'workout', has_diet=True
+        )
+        rendered = ' '.join(card['body'] for card in visual['cards'])
+
+        self.assertEqual(
+            [item['day'] for item in context['availability']],
+            ['월', '수', '토'],
+        )
+        self.assertIn('입력한 운동 가능 일정 확인됨', rendered)
+        self.assertNotIn('정보 없음', rendered)
+
+    def test_grocery_step_omits_duplicate_text_body(self):
+        conversation_id = self._seed_weight_profile()
+        result = self.manager._run_single_phase(
+            conversation_id, 'control', 'grocery',
+            '장보기 단계 진행', 'low',
+        )
+
+        self.assertEqual(result['steps'][0]['content'], '')
+        self.assertEqual(result['steps'][0]['visual']['type'], 'grocery')
 
     def test_control_autonomous_finish_still_offers_final_edit(self):
         conversation_id = self._seed_habit_profile()

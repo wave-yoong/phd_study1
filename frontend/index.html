@@ -679,6 +679,7 @@
         }
         .cal-cell.d-strength { background: #e7f7f0; }
         .cal-cell.d-cardio { background: #eef2ff; }
+        .cal-cell.d-mobility { background: #f5f3ff; }
         .cal-cell.d-rest { background: #f3f4f6; color: #9ca3af; }
         .cal-day { display: block; font-weight: 700; font-size: 13px; color: #374151; }
         .cal-cell.d-rest .cal-day { color: #9ca3af; }
@@ -690,6 +691,7 @@
         .cal-legend span { display: inline-flex; align-items: center; gap: 5px; }
         .cal-legend .dot.d-strength { background: #34d399; }
         .cal-legend .dot.d-cardio { background: #818cf8; }
+        .cal-legend .dot.d-mobility { background: #a78bfa; }
         .cal-legend .dot.d-rest { background: #d1d5db; }
 
         .approval-prompt {
@@ -920,8 +922,8 @@
     
     <script>
         // Bump this whenever the UI changes so we can confirm the running build.
-        const BUILD = 'wellness-build-14 · two-week-grocery+applied-edits';
-        const EXPECTED_SERVER_BUILD = 'wellness-build-14';
+        const BUILD = 'wellness-build-15 · structured-plan-edits';
+        const EXPECTED_SERVER_BUILD = 'wellness-build-15';
         console.log('[study] UI ' + BUILD);
         window.addEventListener('DOMContentLoaded', () => {
             const t = document.getElementById('buildTag');
@@ -1095,12 +1097,18 @@
                     </div>`;
             }
             if (visual.type === 'calendar') {
-                const kindClass = {rest: 'd-rest', strength: 'd-strength', cardio: 'd-cardio'};
-                const kindLabel = {rest: '휴식', strength: '근력', cardio: '유산소'};
+                const kindClass = {
+                    rest: 'd-rest', strength: 'd-strength',
+                    cardio: 'd-cardio', mobility: 'd-mobility'
+                };
+                const kindLabel = {
+                    rest: '휴식', strength: '근력',
+                    cardio: '유산소', mobility: '요가·스트레칭'
+                };
                 const cells = (visual.days || []).map(d => `
                     <div class="cal-cell ${kindClass[d.kind] || ''}">
                         <span class="cal-day">${d.day}</span>
-                        <span class="cal-kind">${kindLabel[d.kind] || ''}</span>
+                        <span class="cal-kind">${escapeHtml(d.label || kindLabel[d.kind] || '')}</span>
                         ${d.tag ? `<span class="cal-tag">점검</span>` : ''}
                     </div>`).join('');
                 const summary = [];
@@ -1114,6 +1122,7 @@
                         <div class="cal-legend">
                             <span><span class="dot d-strength"></span>근력</span>
                             <span><span class="dot d-cardio"></span>유산소</span>
+                            <span><span class="dot d-mobility"></span>요가·스트레칭</span>
                             <span><span class="dot d-rest"></span>휴식</span>
                         </div>
                     </div>`;
