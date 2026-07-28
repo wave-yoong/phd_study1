@@ -656,12 +656,13 @@
                             <div class="roster-card">
                                 <div class="roster-head">
                                     <span class="roster-id">{{ c.id }}</span>
-                                    <span class="roster-name">{{ c.name }} · {{ c.age }}세</span>
+                                    <span class="roster-name">{{ c.name }}</span>
                                     <span class="roster-tag">{{ c.tag }}</span>
                                 </div>
-                                <div class="roster-line"><b>학력</b> {{ c.education }}</div>
+                                <div class="roster-line"><b>전공</b> {{ c.major }}</div>
                                 <div class="roster-line"><b>경력</b> {{ c.experience }}</div>
                                 <div class="roster-line"><b>역량</b> {{ c.skills }}</div>
+                                <div class="roster-line"><b>과제 평가</b> {{ c.assessment }}</div>
                                 <div class="roster-line roster-concern"><b>우려</b> {{ c.concern }}</div>
                             </div>
                         {% endfor %}

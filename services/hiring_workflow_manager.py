@@ -5,48 +5,56 @@ from database.db_manager import DBManager
 
 # Fictional applicant pool (fixed). One source of truth used both for the
 # start-screen roster and for the 'finalize' decision cards, so they never drift.
-# Note: 나이/학력 are resume-style fields; equalize or drop them if you don't want
-# demographic attributes to become a confound (see HIRING_STUDY_DESIGN.md).
+# Profiles are limited to JOB-RELEVANT hiring factors only (major fit, relevant
+# experience, competencies, work-sample assessment, strengths, job-relevant
+# risk). Demographic / prestige attributes (age, school tier, nationality) are
+# intentionally excluded to avoid bias confounds. Names are kept only as labels,
+# not as decision factors.
 CANDIDATES: List[Dict[str, str]] = [
     {
-        'id': 'A', 'name': '김서연', 'age': 29, 'tag': '실무 즉시전력형',
-        'education': '국내 4년제 신문방송학 학사',
-        'experience': '마케팅 인턴 2회(스타트업·대행사), SNS·퍼포먼스 캠페인 실운영',
-        'skills': '퍼포먼스 마케팅, 광고 세팅, 콘텐츠 기획',
-        'concern': '6개월~1년 단위로 이직이 잦음',
+        'id': 'A', 'name': '김서연', 'tag': '실무 즉시전력형',
+        'major': '마케팅 유관 전공',
+        'experience': '마케팅 실무 2년, SNS·퍼포먼스 캠페인 직접 운영',
+        'skills': '퍼포먼스 마케팅, 광고 운영, 콘텐츠 기획',
+        'assessment': '실무 과제 상 (실행 계획이 구체적)',
+        'concern': '평균 근속 기간이 짧아 조기 이탈 가능성',
         'ai_note': '실무역량 상 / 장기 근속은 데이터로 예측 어려움',
     },
     {
-        'id': 'B', 'name': '이준호', 'age': 26, 'tag': '성장 잠재력형',
-        'education': '상위권대 경영학 학사 (신입)',
-        'experience': '정규 실무 경험 거의 없음, 마케팅 공모전 수상 2회',
+        'id': 'B', 'name': '이준호', 'tag': '성장 잠재력형',
+        'major': '마케팅 유관 전공',
+        'experience': '정규 실무 경험은 적음, 마케팅 공모전 수상 2회',
         'skills': '콘텐츠 기획·카피라이팅, 빠른 학습력',
+        'assessment': '실무 과제 최상 (창의성 1위)',
         'concern': '실무 역량이 아직 검증되지 않음',
         'ai_note': '잠재력 상 / 잠재력은 예측치라 실제 성과는 불확실',
     },
     {
-        'id': 'C', 'name': '박민지', 'age': 28, 'tag': '조직 적합성형',
-        'education': '국내 4년제 심리학 학사',
-        'experience': '중소기업 마케팅 1년(팀 협업 중심)',
-        'skills': '커뮤니케이션, 협업, 프로젝트 코디네이션',
-        'concern': '뾰족한 전문성이 부족함',
-        'ai_note': '적합성 상 / 면접 인상은 주관적이라 편향 가능',
+        'id': 'C', 'name': '박민지', 'tag': '조직 적합성형',
+        'major': '마케팅 유관 전공',
+        'experience': '마케팅 실무 1년 (팀 협업 중심 프로젝트)',
+        'skills': '커뮤니케이션, 협업, 프로젝트 조율',
+        'assessment': '실무 과제 중 (무난, 완성도 안정적)',
+        'concern': '두드러지는 전문 분야가 부족함',
+        'ai_note': '협업 적합성 상 / 면접 인상은 주관적이라 편향 가능',
     },
     {
-        'id': 'D', 'name': '최지훈', 'age': 30, 'tag': '데이터 분석형',
-        'education': '통계학 학사, 데이터분석 자격증 보유',
+        'id': 'D', 'name': '최지훈', 'tag': '데이터 분석형',
+        'major': '데이터·통계 전공, 데이터분석 자격 보유',
         'experience': '마케팅 데이터 분석 2년',
         'skills': 'SQL, 데이터 시각화, 성과 분석',
+        'assessment': '실무 과제 상(정량) / 크리에이티브 요소는 약함',
         'concern': '크리에이티브·발표에 소극적',
         'ai_note': '분석력 상 / 정량 위주 평가라 대인 역량은 덜 반영됨',
     },
     {
-        'id': 'E', 'name': '정하윤', 'age': 27, 'tag': '글로벌 스펙형',
-        'education': '해외 대학 마케팅 전공, 영어 능통',
-        'experience': '해외 인턴 1회, 글로벌 브랜드 서포터즈',
-        'skills': '영어, 글로벌 캠페인, 트렌드 감각',
-        'concern': '자기주장이 강해 팀 융화에 물음표',
-        'ai_note': '스펙·글로벌 역량 상 / 협업 스타일은 짧은 면접으론 판단 한계',
+        'id': 'E', 'name': '정하윤', 'tag': '실행력·멀티태스킹형',
+        'major': '마케팅 유관 전공',
+        'experience': '대행사 마케팅 1.5년, 여러 프로젝트 동시 수행',
+        'skills': '프로젝트 실행, 일정 관리, 광고·이벤트 운영',
+        'assessment': '실무 과제 중상 (빠른 실행, 넓은 범위)',
+        'concern': '폭은 넓지만 특정 분야의 깊이는 아직 얕음',
+        'ai_note': '실행력 상 / 전문성 깊이는 짧은 검토로 판단 한계',
     },
 ]
 

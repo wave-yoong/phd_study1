@@ -37,18 +37,26 @@ Assign condition via URL (`/?group=decision`, `/?group=auto`) or let it randomiz
 
 ---
 
-## 2. The four candidates (fixed)
+## 2. The five candidates (fixed)
 
-Deterministic, value-laden trade-offs so no option is objectively "correct":
+Profiles use **job-relevant hiring factors only** — major fit, relevant
+experience, competencies, work-sample (과제) assessment, strengths, and a
+job-relevant risk. Demographic / prestige attributes (age, school tier,
+nationality) are intentionally excluded so they don't become bias confounds.
+Trade-offs are value-laden so no option is objectively "correct":
 
-- **A · 김서연** — 실무 즉시전력 (인턴 2회, 캠페인 경험) / 우려: 잦은 이직.
-- **B · 이준호** — 성장 잠재력 (과제 창의성 1위) / 우려: 실무 미검증.
-- **C · 박민지** — 조직 적합성 (소통·협업, 면접 호감) / 우려: 평범한 전문성.
-- **D · 최지훈** — 데이터 분석 (분석력·자격증) / 우려: 약한 크리에이티브.
+- **A · 김서연** — 실무 즉시전력 (마케팅 실무 2년, 캠페인 운영) / 우려: 짧은 근속 이력.
+- **B · 이준호** — 성장 잠재력 (과제 창의성 1위, 빠른 학습) / 우려: 실무 미검증.
+- **C · 박민지** — 조직 적합성 (소통·협업) / 우려: 두드러진 전문성 부족.
+- **D · 최지훈** — 데이터 분석 (분석·자격 보유) / 우려: 약한 크리에이티브.
+- **E · 정하윤** — 실행력·멀티태스킹 (빠른 실행, 넓은 범위) / 우려: 얕은 전문성 깊이.
 
-Edit them (and the option cards) in `HiringWorkflowManager.DECISION_OPTIONS`; keep
-the prose in `services/hiring_mock_service.py` (demo) and
-`services/hiring_gpt_service.py` (`AGENT_PERSONA` / `PHASE_INSTRUCTIONS`) in sync.
+The pool is defined once as `CANDIDATES` in `services/hiring_workflow_manager.py`
+(used both for the start-screen roster and the finalize cards). Keep the prose in
+`services/hiring_mock_service.py` (demo) and `services/hiring_gpt_service.py`
+(`AGENT_PERSONA` / `PHASE_INSTRUCTIONS`) in sync. Names are labels only, not
+decision factors; switch to letter-only ids if you want a fully demographic-free
+stimulus.
 
 ---
 
