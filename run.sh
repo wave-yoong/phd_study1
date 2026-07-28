@@ -2,19 +2,21 @@
 # Launch a user-control agent for PhD Study 1 (Effect of User Control).
 #
 # Study versions in this repo (pick with the STUDY env var):
-#   STUDY=hiring (default)  : hiring-decision agent, DECISIONAL control
-#                             ("deciding WHAT to do"), selectable option cards.
-#                             Conditions: decision vs auto.
+#   STUDY=stock (default)   : stock-report agent, EXECUTION-VERSION control.
+#                             Agent offers 2-3 versions (length/model/time); user
+#                             picks which to run, report is identical regardless.
+#                             Conditions: version vs auto. (fixed content, no API key)
+#   STUDY=hiring            : hiring-decision agent, DECISIONAL control
+#                             ("deciding WHAT to do"). Conditions: decision vs auto.
 #   STUDY=finance           : finance allocation agent, also decisional control.
-#   STUDY=diet              : diet/exercise agent, PROCESS control.
-#                             Conditions: control vs auto.
+#   STUDY=diet              : diet/exercise agent, PROCESS control (control vs auto).
 #
 # Usage:
-#   ./run.sh demo               # demo mode, no API key (mock agent), hiring study
+#   ./run.sh demo               # demo mode, no API key, stock study
 #   ./run.sh                    # real LLM (Azure/OpenAI creds from .env)
-#   STUDY=diet ./run.sh demo    # run the diet study instead
+#   STUDY=hiring ./run.sh demo  # run a different study
 
-STUDY="${STUDY:-hiring}"
+STUDY="${STUDY:-stock}"
 export STUDY
 
 echo "======================================"
@@ -32,6 +34,8 @@ fi
 
 if [ "$STUDY" = "diet" ]; then
     GROUPS="?group=control or ?group=auto"
+elif [ "$STUDY" = "stock" ]; then
+    GROUPS="?group=version or ?group=auto"
 else
     GROUPS="?group=decision or ?group=auto"   # hiring / finance
 fi

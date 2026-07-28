@@ -7,9 +7,26 @@ the user is granted. Pick one with the `STUDY` env var.
 
 | Version | `STUDY` | Type of control | Domain |
 |---------|---------|-----------------|--------|
-| **V1** (default) | `hiring` | **Decisional** — "deciding **WHAT** to do" | Hiring-candidate selection |
+| **V2** (default) | `stock` | **Execution-version** — choose *which version the agent runs* | Stock-market report (functional) |
+| **V1** | `hiring` | **Decisional** — "deciding **WHAT** to do" | Hiring-candidate selection |
 | V1 (draft) | `finance` | **Decisional** | Personal-finance allocation |
 | **V-process** | `diet` | **Process** — "steering **HOW** it's done" | Diet / exercise planning |
+
+## V2 — Stock report, execution-version control
+
+Everyone does the **same task** (the agent writes a 2026 Q1 domestic/overseas
+stock-market report). The control group is offered **2–3 versions** — each with
+its **length / model / time** trade-offs — and picks which the agent runs. The
+no-control group is told the agent will pick "the most appropriate version"
+itself. **The final report is identical** across every version and both
+conditions — only the *control experience* is manipulated (output held constant).
+
+| Condition | URL | What the participant experiences |
+|-----------|-----|----------------------------------|
+| **version** (user-control) | `/?group=version` | Agent shows version cards (분량/모델/소요시간); **the user picks** which to run. |
+| **auto** (no-control) | `/?group=auto` | "제가 판단했을 때 가장 적절한 버전으로 준비해드릴게요!" → agent proceeds. |
+
+See **[REPORT_STUDY_DESIGN.md](REPORT_STUDY_DESIGN.md)**.
 
 ## V1 — Hiring decision, decisional control
 
@@ -40,10 +57,11 @@ Both conditions surface the same tool steps (스크리닝 → 기준 분석 → 
 ```bash
 pip install -r requirements.txt
 
-# Demo mode (mock agent, no API key needed) — hiring study by default
+# Demo mode (no API key needed) — stock study (V2) by default
 ./run.sh demo
 
 # Other versions
+STUDY=hiring  ./run.sh demo
 STUDY=finance ./run.sh demo
 STUDY=diet    ./run.sh demo
 
@@ -52,7 +70,7 @@ cp .env.example .env   # then add your key(s)
 ./run.sh
 ```
 
-Open `http://localhost:5000` (add `?group=decision` or `?group=auto`; `?group=control` for the diet study).
+Open `http://localhost:5000`. Force a condition per study: stock `?group=version`, hiring/finance `?group=decision`, diet `?group=control` (all also accept `?group=auto`).
 
 ## Data
 
@@ -61,12 +79,14 @@ Everything is logged to SQLite (`database/chatbot.db`):
 - `workflow_state.tool_name`, `.intervention_type`, `.source_selection`, `.autonomy_level`
 
 `intervention_type` is the key behavioral DV:
-- **V1 (finance):** `decide` (user chose) / `agent_decided` (auto) / `revise` / `confirm`; the chosen option id is in `.source_selection` (`1`/`2`/`3`/`custom`).
+- **V2 (stock):** `select_version` (user chose) / `agent_selected` (auto) / `confirm`; the chosen version id is in `.source_selection` (`1`/`2`/`3`).
+- **V1 (hiring/finance):** `decide` (user chose) / `agent_decided` (auto) / `revise` / `confirm`; the chosen option id is in `.source_selection` (`1`/`2`/`3`, `A`–`E`, `custom`).
 - **V-process (diet):** `approve` / `modify` / `interrupt` / `raise_autonomy` / `override`.
 
 See [USER_DATA_GUIDE.md](USER_DATA_GUIDE.md) for how to inspect/export.
 
 ## More docs
+- [REPORT_STUDY_DESIGN.md](REPORT_STUDY_DESIGN.md) — **V2** (stock) execution-version control design and what to fill in.
 - [HIRING_STUDY_DESIGN.md](HIRING_STUDY_DESIGN.md) — **V1** (hiring) decisional-control design and what to fill in.
 - [FINANCE_STUDY_DESIGN.md](FINANCE_STUDY_DESIGN.md) — finance decisional-control draft.
 - [STUDY_DESIGN.md](STUDY_DESIGN.md) — V-process (diet) condition logic and control levers.

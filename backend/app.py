@@ -16,17 +16,34 @@ app.secret_key = os.getenv('FLASK_SECRET_KEY', 'dev-secret-key-change-in-product
 # ---------------------------------------------------------------------------
 # Which study/agent version to serve. Versions of the user-control agent live
 # in this repo:
-#   - 'hiring' (V1, default): hiring-decision agent with DECISIONAL control
-#     ("deciding WHAT to do"), presented as selectable option cards.
-#     Conditions: 'decision' vs 'auto'.
+#   - 'stock' (V2, default): stock-report agent with EXECUTION-VERSION control.
+#     The agent offers 2-3 versions (length / model / time trade-offs) and the
+#     user picks which to run; the final report is identical regardless.
+#     Conditions: 'version' vs 'auto'.
+#   - 'hiring' (V1): hiring-decision agent with DECISIONAL control
+#     ("deciding WHAT to do"), selectable option cards. Conditions: 'decision' vs 'auto'.
 #   - 'finance': earlier V1 draft (finance allocation), also decisional control.
 #   - 'diet'   : the earlier diet/exercise agent with PROCESS control.
 #     Conditions: 'control' vs 'auto'.
 # Select with the STUDY env var.
 # ---------------------------------------------------------------------------
-DEFAULT_STUDY = os.getenv('STUDY', 'hiring').strip().lower() or 'hiring'
+DEFAULT_STUDY = os.getenv('STUDY', 'stock').strip().lower() or 'stock'
 
 STUDY_CONFIG = {
+    'stock': {
+        'title': 'AI 증시 분석 보고서 에이전트',
+        'control_condition': 'version',
+        'scenario': (
+            "당신은 투자 참고용으로 최신 증시 분석 보고서가 필요합니다. AI 에이전트가 "
+            "'2026년 1분기 국내·해외 증시 현황' 보고서를 대신 작성해 줍니다. "
+            "에이전트와 대화하며 보고서를 받아 보세요."
+        ),
+        'placeholder': '예: 2026년 1분기 국내·해외 증시 현황 보고서 작성해줘',
+        'starter': '2026년 1분기 국내·해외 증시 현황 보고서를 작성해줘',
+        'suggestions': [
+            '2026년 1분기 국내·해외 증시 현황 보고서를 작성해줘',
+        ],
+    },
     'hiring': {
         'title': 'AI 채용 결정 에이전트',
         'control_condition': 'decision',
@@ -80,6 +97,15 @@ def _build_gpt_service(study: str):
     """
     force_mock = os.getenv('USE_MOCK_GPT', '').strip() in ('1', 'true', 'True')
 
+    def _load(path):
+        module_name, class_name = path.split(':')
+        module = __import__(module_name, fromlist=[class_name])
+        return getattr(module, class_name)
+
+    # The stock study uses fixed content (no LLM) — always the placeholder service.
+    if study == 'stock':
+        return _load('services.report_mock_service:ReportMockService')()
+
     if study == 'diet':
         real_import = 'services.gpt_service:GPTService'
         mock_import = 'services.mock_gpt_service:MockGPTService'
@@ -89,11 +115,6 @@ def _build_gpt_service(study: str):
     else:
         real_import = 'services.hiring_gpt_service:HiringGPTService'
         mock_import = 'services.hiring_mock_service:HiringMockService'
-
-    def _load(path):
-        module_name, class_name = path.split(':')
-        module = __import__(module_name, fromlist=[class_name])
-        return getattr(module, class_name)
 
     if force_mock:
         return _load(mock_import)()
@@ -117,6 +138,9 @@ def _build_workflow(study: str, service):
     if study == 'finance':
         from services.finance_workflow_manager import FinanceWorkflowManager
         return FinanceWorkflowManager(service, db_manager)
+    if study == 'stock':
+        from services.report_workflow_manager import StockReportWorkflowManager
+        return StockReportWorkflowManager(service, db_manager)
     from services.hiring_workflow_manager import HiringWorkflowManager
     return HiringWorkflowManager(service, db_manager)
 
@@ -137,7 +161,7 @@ def _control_condition() -> str:
 def _normalize_condition(raw: str) -> str:
     """Map incoming group labels to a canonical condition, or '' if unspecified."""
     value = (raw or '').strip().lower()
-    if value in ('control', 'decision', 'user_control', 'user-control', 'uc', 'high', '1'):
+    if value in ('control', 'decision', 'version', 'user_control', 'user-control', 'uc', 'high', '1'):
         return _control_condition()
     if value in ('auto', 'autonomous', 'no_control', 'no-control', 'nc', 'low', '0'):
         return CONDITION_AUTO
