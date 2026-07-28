@@ -1,18 +1,20 @@
 #!/bin/bash
 # Launch a user-control agent for PhD Study 1 (Effect of User Control).
 #
-# Two study versions live in this repo (pick with the STUDY env var):
-#   STUDY=finance (default) : finance allocation agent, DECISIONAL control
-#                             ("deciding WHAT to do"). Conditions: decision vs auto.
+# Study versions in this repo (pick with the STUDY env var):
+#   STUDY=hiring (default)  : hiring-decision agent, DECISIONAL control
+#                             ("deciding WHAT to do"), selectable option cards.
+#                             Conditions: decision vs auto.
+#   STUDY=finance           : finance allocation agent, also decisional control.
 #   STUDY=diet              : diet/exercise agent, PROCESS control.
 #                             Conditions: control vs auto.
 #
 # Usage:
-#   ./run.sh demo               # demo mode, no API key (mock agent), finance study
+#   ./run.sh demo               # demo mode, no API key (mock agent), hiring study
 #   ./run.sh                    # real LLM (Azure/OpenAI creds from .env)
 #   STUDY=diet ./run.sh demo    # run the diet study instead
 
-STUDY="${STUDY:-finance}"
+STUDY="${STUDY:-hiring}"
 export STUDY
 
 echo "======================================"
@@ -31,7 +33,7 @@ fi
 if [ "$STUDY" = "diet" ]; then
     GROUPS="?group=control or ?group=auto"
 else
-    GROUPS="?group=decision or ?group=auto"
+    GROUPS="?group=decision or ?group=auto"   # hiring / finance
 fi
 
 # Run from the repository root so package imports and DATABASE_PATH resolve.

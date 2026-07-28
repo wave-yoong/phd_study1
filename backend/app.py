@@ -13,17 +13,30 @@ app = Flask(__name__,
 app.secret_key = os.getenv('FLASK_SECRET_KEY', 'dev-secret-key-change-in-production')
 
 # ---------------------------------------------------------------------------
-# Which study/agent version to serve. Two versions of the user-control agent
-# live in this repo:
-#   - 'finance' (V1, default): personal-finance allocation agent with DECISIONAL
-#     control ("deciding WHAT to do"). Conditions: 'decision' vs 'auto'.
+# Which study/agent version to serve. Versions of the user-control agent live
+# in this repo:
+#   - 'hiring' (V1, default): hiring-decision agent with DECISIONAL control
+#     ("deciding WHAT to do"), presented as selectable option cards.
+#     Conditions: 'decision' vs 'auto'.
+#   - 'finance': earlier V1 draft (finance allocation), also decisional control.
 #   - 'diet'   : the earlier diet/exercise agent with PROCESS control.
 #     Conditions: 'control' vs 'auto'.
-# Select with the STUDY env var (or ?study= on the URL for quick testing).
+# Select with the STUDY env var.
 # ---------------------------------------------------------------------------
-DEFAULT_STUDY = os.getenv('STUDY', 'finance').strip().lower() or 'finance'
+DEFAULT_STUDY = os.getenv('STUDY', 'hiring').strip().lower() or 'hiring'
 
 STUDY_CONFIG = {
+    'hiring': {
+        'title': 'AI 채용 결정 에이전트',
+        'control_condition': 'decision',
+        'scenario': (
+            "당신은 한 IT 회사의 채용 담당자입니다. 마케팅팀 신입 1명을 뽑는데 지원자가 많습니다. "
+            "AI 채용 에이전트가 지원자들의 서류·실무 과제·면접 기록을 분석해 정리해 줍니다. "
+            "에이전트와 대화하며 최종 합격자를 결정해 주세요."
+        ),
+        'placeholder': '예: 마케팅팀 신입 채용, 지원자들 분석해줘',
+        'starter': '마케팅팀 신입을 뽑으려고 해요. 지원자들 분석해줘',
+    },
     'finance': {
         'title': 'AI 재무 배분 에이전트',
         'control_condition': 'decision',
@@ -62,9 +75,12 @@ def _build_gpt_service(study: str):
     if study == 'diet':
         real_import = 'services.gpt_service:GPTService'
         mock_import = 'services.mock_gpt_service:MockGPTService'
-    else:
+    elif study == 'finance':
         real_import = 'services.finance_gpt_service:FinanceGPTService'
         mock_import = 'services.finance_mock_service:FinanceMockService'
+    else:
+        real_import = 'services.hiring_gpt_service:HiringGPTService'
+        mock_import = 'services.hiring_mock_service:HiringMockService'
 
     def _load(path):
         module_name, class_name = path.split(':')
@@ -90,8 +106,11 @@ def _build_workflow(study: str, service):
     if study == 'diet':
         from services.workflow_manager import WorkflowManager
         return WorkflowManager(service, db_manager)
-    from services.finance_workflow_manager import FinanceWorkflowManager
-    return FinanceWorkflowManager(service, db_manager)
+    if study == 'finance':
+        from services.finance_workflow_manager import FinanceWorkflowManager
+        return FinanceWorkflowManager(service, db_manager)
+    from services.hiring_workflow_manager import HiringWorkflowManager
+    return HiringWorkflowManager(service, db_manager)
 
 
 gpt_service = _build_gpt_service(DEFAULT_STUDY)
@@ -170,6 +189,7 @@ def _serialize(result: dict, **extra) -> dict:
         'agent_actions': result.get('agent_actions', []),
         'awaiting_input': result.get('awaiting_input', True),
         'choices': choices,
+        'decision_mode': result.get('decision_mode'),
     }
     payload.update(extra)
     return payload

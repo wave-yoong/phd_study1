@@ -241,6 +241,119 @@
             color: #8e8ea0;
         }
 
+        /* ---- Card-based decision UI (finance/hiring decisional control) ---- */
+        .decision {
+            margin-top: 14px;
+        }
+
+        .decision-prompt {
+            font-size: 13px;
+            font-weight: 600;
+            color: #6e6e80;
+            margin-bottom: 10px;
+        }
+
+        .option-cards {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .option-card {
+            width: 100%;
+            text-align: left;
+            border: 1.5px solid #e5e7eb;
+            border-radius: 12px;
+            background: #ffffff;
+            padding: 14px 16px;
+            cursor: pointer;
+            transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+            display: flex;
+            gap: 12px;
+            align-items: flex-start;
+        }
+
+        .option-card:hover {
+            border-color: #c7ccd4;
+            background: #fafbfc;
+        }
+
+        .option-card.selected {
+            border-color: #10a37f;
+            background: #f0faf6;
+            box-shadow: 0 0 0 1px #10a37f inset;
+        }
+
+        .option-card .option-marker {
+            width: 22px;
+            height: 22px;
+            border-radius: 999px;
+            border: 1.5px solid #cfd4dc;
+            flex-shrink: 0;
+            margin-top: 2px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: #ffffff;
+            font-size: 13px;
+        }
+
+        .option-card.selected .option-marker {
+            background: #10a37f;
+            border-color: #10a37f;
+        }
+
+        .option-card .option-body {
+            flex: 1;
+        }
+
+        .option-card .option-title {
+            font-size: 15px;
+            font-weight: 600;
+            color: #202123;
+            margin-bottom: 3px;
+        }
+
+        .option-card .option-desc {
+            font-size: 13px;
+            line-height: 1.5;
+            color: #565869;
+        }
+
+        .decision-actions {
+            margin-top: 12px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .decision-confirm {
+            padding: 10px 18px;
+            font-size: 14px;
+            font-weight: 600;
+            background: #10a37f;
+            color: #ffffff;
+            border: 1px solid #0d8c6d;
+            border-radius: 8px;
+        }
+
+        .decision-confirm:hover {
+            background: #0d8c6d;
+            color: #ffffff;
+        }
+
+        .decision-confirm:disabled {
+            background: #e5e7eb;
+            color: #9ca3af;
+            border-color: #e5e7eb;
+            cursor: not-allowed;
+        }
+
+        .decision-hint {
+            font-size: 12px;
+            color: #8e8ea0;
+        }
+
         .choice-actions {
             margin-top: 10px;
             display: flex;
@@ -476,7 +589,7 @@
         }
 
         function disableAllChoiceButtons() {
-            document.querySelectorAll('.choice-item, .choice-submit').forEach(button => {
+            document.querySelectorAll('.choice-item, .choice-submit, .option-card, .decision-confirm').forEach(button => {
                 button.disabled = true;
             });
         }
@@ -583,7 +696,92 @@
             }
         }
 
-        function addMessage(role, content, isSystem = false, choices = [], agentActions = []) {
+        function renderDecisionCards(container, choices, mode) {
+            const isMulti = mode === 'multi';
+            const selected = new Set();
+
+            const wrap = document.createElement('div');
+            wrap.className = 'decision';
+
+            const prompt = document.createElement('div');
+            prompt.className = 'decision-prompt';
+            prompt.textContent = isMulti
+                ? '아래에서 원하는 만큼 고른 뒤 결정을 눌러 주세요.'
+                : '아래에서 하나를 골라 결정을 눌러 주세요. 결정은 당신의 몫입니다.';
+            wrap.appendChild(prompt);
+
+            const cards = document.createElement('div');
+            cards.className = 'option-cards';
+
+            const confirmBtn = document.createElement('button');
+            confirmBtn.type = 'button';
+            confirmBtn.className = 'decision-confirm';
+            confirmBtn.textContent = '결정';
+            confirmBtn.disabled = true;
+
+            choices.forEach(choice => {
+                const card = document.createElement('button');
+                card.type = 'button';
+                card.className = 'option-card';
+                card.innerHTML = `
+                    <span class="option-marker">${isMulti ? '' : ''}</span>
+                    <span class="option-body">
+                        <span class="option-title">${escapeHtml(choice.label || '')}</span>
+                        ${choice.description ? `<span class="option-desc">${escapeHtml(choice.description)}</span>` : ''}
+                    </span>
+                `;
+
+                card.addEventListener('click', () => {
+                    if (card.disabled) return;
+                    const key = String(choice.id);
+                    if (isMulti) {
+                        if (selected.has(key)) { selected.delete(key); card.classList.remove('selected'); }
+                        else { selected.add(key); card.classList.add('selected'); }
+                    } else {
+                        cards.querySelectorAll('.option-card').forEach(c => c.classList.remove('selected'));
+                        card.classList.add('selected');
+                        selected.clear();
+                        selected.add(key);
+                        card._value = choice.value;
+                    }
+                    card._value = choice.value;
+                    confirmBtn.disabled = selected.size === 0;
+                });
+
+                card._value = choice.value;
+                cards.appendChild(card);
+            });
+
+            wrap.appendChild(cards);
+
+            confirmBtn.addEventListener('click', () => {
+                if (confirmBtn.disabled) return;
+                const chosenCards = Array.from(cards.querySelectorAll('.option-card.selected'));
+                if (chosenCards.length === 0) return;
+                let message;
+                if (isMulti) {
+                    message = chosenCards.map(c => c._value).filter(Boolean).join(', ');
+                } else {
+                    message = chosenCards[0]._value;
+                }
+                const input = document.getElementById('userInput');
+                input.value = message;
+                sendMessage();
+            });
+
+            const actions = document.createElement('div');
+            actions.className = 'decision-actions';
+            actions.appendChild(confirmBtn);
+            const hint = document.createElement('span');
+            hint.className = 'decision-hint';
+            hint.textContent = '또는 아래 입력창에 직접 지시할 수도 있어요.';
+            actions.appendChild(hint);
+            wrap.appendChild(actions);
+
+            container.appendChild(wrap);
+        }
+
+        function addMessage(role, content, isSystem = false, choices = [], agentActions = [], decisionMode = null) {
             const chatArea = document.getElementById('chatArea');
             const messageDiv = document.createElement('div');
             messageDiv.className = `message ${isSystem ? 'system' : role}`;
@@ -606,9 +804,13 @@
             `;
 
             if (!isSystem && role === 'assistant') {
-                renderChoices(messageDiv, choices);
+                if (decisionMode && Array.isArray(choices) && choices.length) {
+                    renderDecisionCards(messageDiv, choices, decisionMode);
+                } else {
+                    renderChoices(messageDiv, choices);
+                }
             }
-            
+
             chatArea.appendChild(messageDiv);
             chatArea.scrollTop = chatArea.scrollHeight;
         }
@@ -688,7 +890,7 @@
                     conversationId = data.conversation_id;
                 }
                 
-                addMessage('assistant', data.response, false, getRenderableChoices(data), data.agent_actions || []);
+                addMessage('assistant', data.response, false, getRenderableChoices(data), data.agent_actions || [], data.decision_mode || null);
                 setLoading(false);
                 
             } catch (error) {
