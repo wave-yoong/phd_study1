@@ -124,6 +124,124 @@
             margin-bottom: 6px;
         }
 
+        /* ---- Applicant roster (hiring start screen) ---- */
+        .roster {
+            margin-top: 14px;
+        }
+
+        .roster-title {
+            font-size: 13px;
+            font-weight: 700;
+            color: #33415c;
+            margin-bottom: 8px;
+        }
+
+        .roster-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+            gap: 10px;
+        }
+
+        .roster-card {
+            border: 1px solid #e5e7eb;
+            border-radius: 10px;
+            background: #fbfbfc;
+            padding: 12px 14px;
+        }
+
+        .roster-head {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-bottom: 8px;
+        }
+
+        .roster-id {
+            width: 22px;
+            height: 22px;
+            border-radius: 999px;
+            background: #33415c;
+            color: #fff;
+            font-size: 12px;
+            font-weight: 700;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .roster-name {
+            font-size: 14px;
+            font-weight: 600;
+            color: #202123;
+        }
+
+        .roster-tag {
+            font-size: 11px;
+            color: #4f46e5;
+            background: #eef0ff;
+            border-radius: 6px;
+            padding: 2px 7px;
+        }
+
+        .roster-line {
+            font-size: 12.5px;
+            line-height: 1.5;
+            color: #565869;
+        }
+
+        .roster-line b {
+            color: #33415c;
+            font-weight: 600;
+            margin-right: 4px;
+        }
+
+        .roster-concern b {
+            color: #b45309;
+        }
+
+        /* ---- Suggested starter questions ---- */
+        .suggestions {
+            margin-top: 16px;
+        }
+
+        .suggestions-title {
+            font-size: 12px;
+            font-weight: 600;
+            color: #8e8ea0;
+            margin-bottom: 8px;
+        }
+
+        .suggestion-chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .suggestion-chip {
+            padding: 8px 14px;
+            font-size: 13px;
+            font-weight: 500;
+            background: #ffffff;
+            color: #33415c;
+            border: 1px solid #d1d5db;
+            border-radius: 999px;
+            cursor: pointer;
+        }
+
+        .suggestion-chip:hover {
+            border-color: #10a37f;
+            color: #10a37f;
+            background: #f0faf6;
+        }
+
+        .scenario-hint {
+            margin-top: 12px;
+            font-size: 13px;
+            color: #8e8ea0;
+        }
+
         .agent-actions {
             margin-bottom: 10px;
             display: flex;
@@ -527,9 +645,42 @@
                 <div class="message-content">
                     <div class="scenario-box">
                         <div class="scenario-title">시나리오 (실험 참가자 전용)</div>
-                        {{ cfg.scenario }}<br><br>
-                        아래 입력창에 목표나 계획 요청을 입력하며 시작하세요.
+                        {{ cfg.scenario }}
                     </div>
+
+                    {% if cfg.candidates %}
+                    <div class="roster">
+                        <div class="roster-title">지원자 명단 (가상 · 최종 검토 대상 {{ cfg.candidates|length }}명)</div>
+                        <div class="roster-cards">
+                        {% for c in cfg.candidates %}
+                            <div class="roster-card">
+                                <div class="roster-head">
+                                    <span class="roster-id">{{ c.id }}</span>
+                                    <span class="roster-name">{{ c.name }} · {{ c.age }}세</span>
+                                    <span class="roster-tag">{{ c.tag }}</span>
+                                </div>
+                                <div class="roster-line"><b>학력</b> {{ c.education }}</div>
+                                <div class="roster-line"><b>경력</b> {{ c.experience }}</div>
+                                <div class="roster-line"><b>역량</b> {{ c.skills }}</div>
+                                <div class="roster-line roster-concern"><b>우려</b> {{ c.concern }}</div>
+                            </div>
+                        {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    {% if cfg.suggestions %}
+                    <div class="suggestions" id="suggestions">
+                        <div class="suggestions-title">이렇게 시작해 보세요</div>
+                        <div class="suggestion-chips">
+                        {% for s in cfg.suggestions %}
+                            <button type="button" class="suggestion-chip" onclick="useSuggestion(this)">{{ s }}</button>
+                        {% endfor %}
+                        </div>
+                    </div>
+                    {% else %}
+                    <div class="scenario-hint">아래 입력창에 요청을 입력하며 시작하세요.</div>
+                    {% endif %}
                 </div>
             </div>
         </div>
@@ -815,6 +966,12 @@
             chatArea.scrollTop = chatArea.scrollHeight;
         }
         
+        function useSuggestion(btn) {
+            const input = document.getElementById('userInput');
+            input.value = btn.textContent.trim();
+            sendMessage();
+        }
+
         function setLoading(isLoading) {
             const loading = document.getElementById('loading');
             const input = document.getElementById('userInput');
@@ -852,7 +1009,11 @@
             }
 
             disableAllChoiceButtons();
-            
+
+            // Once the conversation starts, the starter suggestions are no longer useful.
+            const suggestions = document.getElementById('suggestions');
+            if (suggestions) suggestions.style.display = 'none';
+
             addMessage('user', message);
             input.value = '';
             setLoading(true);

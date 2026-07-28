@@ -3,6 +3,7 @@ import random
 from flask import Flask, request, jsonify, render_template, session
 from dotenv import load_dotenv
 from database.db_manager import DBManager
+from services.hiring_workflow_manager import CANDIDATES as HIRING_CANDIDATES
 
 # Load environment variables
 load_dotenv()
@@ -30,12 +31,19 @@ STUDY_CONFIG = {
         'title': 'AI 채용 결정 에이전트',
         'control_condition': 'decision',
         'scenario': (
-            "당신은 한 IT 회사의 채용 담당자입니다. 마케팅팀 신입 1명을 뽑는데 지원자가 많습니다. "
-            "AI 채용 에이전트가 지원자들의 서류·실무 과제·면접 기록을 분석해 정리해 줍니다. "
-            "에이전트와 대화하며 최종 합격자를 결정해 주세요."
+            "당신은 한 IT 회사의 채용 담당자입니다. 마케팅팀 신입 1명을 뽑는데, 아래 5명이 최종 검토 "
+            "대상으로 올라왔습니다. AI 채용 에이전트가 지원자들의 서류·실무 과제·면접 기록을 분석해 "
+            "정리해 줍니다. 에이전트와 대화하며 최종 합격자를 결정해 주세요."
         ),
-        'placeholder': '예: 마케팅팀 신입 채용, 지원자들 분석해줘',
+        'placeholder': '예: 지원자들 분석해줘 / 어떤 기준으로 뽑아야 할까?',
         'starter': '마케팅팀 신입을 뽑으려고 해요. 지원자들 분석해줘',
+        'candidates': HIRING_CANDIDATES,
+        'suggestions': [
+            '지원자 5명을 강점·약점 중심으로 비교해줘',
+            '어떤 기준으로 뽑아야 할지부터 알려줘',
+            '실무에 바로 투입할 사람이 필요해. 누가 맞을까?',
+            '성장 잠재력을 가장 중요하게 보고 싶어',
+        ],
     },
     'finance': {
         'title': 'AI 재무 배분 에이전트',

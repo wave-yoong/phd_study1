@@ -3,6 +3,68 @@ from typing import Dict, Any, List, Optional, Tuple
 from database.db_manager import DBManager
 
 
+# Fictional applicant pool (fixed). One source of truth used both for the
+# start-screen roster and for the 'finalize' decision cards, so they never drift.
+# Note: 나이/학력 are resume-style fields; equalize or drop them if you don't want
+# demographic attributes to become a confound (see HIRING_STUDY_DESIGN.md).
+CANDIDATES: List[Dict[str, str]] = [
+    {
+        'id': 'A', 'name': '김서연', 'age': 29, 'tag': '실무 즉시전력형',
+        'education': '국내 4년제 신문방송학 학사',
+        'experience': '마케팅 인턴 2회(스타트업·대행사), SNS·퍼포먼스 캠페인 실운영',
+        'skills': '퍼포먼스 마케팅, 광고 세팅, 콘텐츠 기획',
+        'concern': '6개월~1년 단위로 이직이 잦음',
+        'ai_note': '실무역량 상 / 장기 근속은 데이터로 예측 어려움',
+    },
+    {
+        'id': 'B', 'name': '이준호', 'age': 26, 'tag': '성장 잠재력형',
+        'education': '상위권대 경영학 학사 (신입)',
+        'experience': '정규 실무 경험 거의 없음, 마케팅 공모전 수상 2회',
+        'skills': '콘텐츠 기획·카피라이팅, 빠른 학습력',
+        'concern': '실무 역량이 아직 검증되지 않음',
+        'ai_note': '잠재력 상 / 잠재력은 예측치라 실제 성과는 불확실',
+    },
+    {
+        'id': 'C', 'name': '박민지', 'age': 28, 'tag': '조직 적합성형',
+        'education': '국내 4년제 심리학 학사',
+        'experience': '중소기업 마케팅 1년(팀 협업 중심)',
+        'skills': '커뮤니케이션, 협업, 프로젝트 코디네이션',
+        'concern': '뾰족한 전문성이 부족함',
+        'ai_note': '적합성 상 / 면접 인상은 주관적이라 편향 가능',
+    },
+    {
+        'id': 'D', 'name': '최지훈', 'age': 30, 'tag': '데이터 분석형',
+        'education': '통계학 학사, 데이터분석 자격증 보유',
+        'experience': '마케팅 데이터 분석 2년',
+        'skills': 'SQL, 데이터 시각화, 성과 분석',
+        'concern': '크리에이티브·발표에 소극적',
+        'ai_note': '분석력 상 / 정량 위주 평가라 대인 역량은 덜 반영됨',
+    },
+    {
+        'id': 'E', 'name': '정하윤', 'age': 27, 'tag': '글로벌 스펙형',
+        'education': '해외 대학 마케팅 전공, 영어 능통',
+        'experience': '해외 인턴 1회, 글로벌 브랜드 서포터즈',
+        'skills': '영어, 글로벌 캠페인, 트렌드 감각',
+        'concern': '자기주장이 강해 팀 융화에 물음표',
+        'ai_note': '스펙·글로벌 역량 상 / 협업 스타일은 짧은 면접으론 판단 한계',
+    },
+]
+
+
+def _finalize_options() -> List[Dict[str, str]]:
+    """Build the 'finalize' decision cards from the candidate pool."""
+    options = []
+    for c in CANDIDATES:
+        options.append({
+            'id': c['id'],
+            'label': f"지원자 {c['id']} · {c['name']} ({c['tag']})",
+            'description': (f"강점: {c['skills']} · 우려: {c['concern']} · "
+                            f"AI 평가: {c['ai_note']}"),
+            'value': f"{c['id']} 지원자({c['name']})를 최종 합격자로 결정할게",
+        })
+    return options
+
+
 class HiringWorkflowManager:
     """
     Drives the hiring-decision agent for PhD Study 1, V1
@@ -69,24 +131,7 @@ class HiringWorkflowManager:
              'description': '지금 정보로 충분하다고 보고 바로 최종 결정으로 넘어갑니다. 빠르지만 AI 평가의 불확실성을 감수.',
              'value': '3 추가 확인 없이 바로 결정할게'},
         ],
-        'finalize': [
-            {'id': 'A', 'label': '지원자 A · 김서연 (실무 즉시전력형)',
-             'description': '강점: 인턴 2회, 실제 캠페인 운영 경험 · 우려: 6개월~1년 단위 잦은 이직 · '
-                            'AI 평가: 실무역량 상 / 장기 로열티는 데이터 부족으로 예측 불확실.',
-             'value': 'A 지원자(김서연)를 최종 합격자로 결정할게'},
-            {'id': 'B', 'label': '지원자 B · 이준호 (성장 잠재력형)',
-             'description': '강점: 과제 창의성 1위, 빠른 학습력 · 우려: 실무 경험 거의 없음 · '
-                            'AI 평가: 잠재력 상 / 잠재력은 예측치라 실제 성과는 불확실.',
-             'value': 'B 지원자(이준호)를 최종 합격자로 결정할게'},
-            {'id': 'C', 'label': '지원자 C · 박민지 (조직 적합성형)',
-             'description': '강점: 팀 커뮤니케이션, 면접 호감도 최고, 협업 · 우려: 뾰족한 전문성 부족 · '
-                            'AI 평가: 적합성 상 / 면접 인상은 주관적이라 편향 가능.',
-             'value': 'C 지원자(박민지)를 최종 합격자로 결정할게'},
-            {'id': 'D', 'label': '지원자 D · 최지훈 (데이터 분석형)',
-             'description': '강점: 데이터 분석, 자격증 다수, 성실 · 우려: 크리에이티브·발표 소극적 · '
-                            'AI 평가: 분석력 상 / 정량 위주 평가라 대인 역량은 덜 반영됨.',
-             'value': 'D 지원자(최지훈)를 최종 합격자로 결정할게'},
-        ],
+        'finalize': _finalize_options(),
     }
 
     def __init__(self, gpt_service, db_manager: DBManager):
@@ -323,7 +368,8 @@ class HiringWorkflowManager:
             'verify': {'1': ['레퍼런스', '평판'], '2': ['과제', '실무 과제'],
                        '3': ['바로', '없이', '충분']},
             'finalize': {'A': ['김서연', '서연'], 'B': ['이준호', '준호'],
-                         'C': ['박민지', '민지'], 'D': ['최지훈', '지훈']},
+                         'C': ['박민지', '민지'], 'D': ['최지훈', '지훈'],
+                         'E': ['정하윤', '하윤']},
         }
         low = msg.lower()
         for oid, kws in keyword_map.get(stage, {}).items():
