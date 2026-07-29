@@ -7,7 +7,8 @@ the user is granted. Pick one with the `STUDY` env var.
 
 | Version | `STUDY` | Type of control | Domain |
 |---------|---------|-----------------|--------|
-| **V2** (default) | `stock` | **Execution-version** — choose *which version the agent runs* | Stock-market report (functional) |
+| **V2** (default) | `stock` | **Execution-version** — choose *which version the agent runs* | Stock-market report (functional, fixed content) |
+| V2 (LLM) | `travel` | **Execution-version** | Travel planner (functional, LLM-driven conversational intake) |
 | **V1** | `hiring` | **Decisional** — "deciding **WHAT** to do" | Hiring-candidate selection |
 | V1 (draft) | `finance` | **Decisional** | Personal-finance allocation |
 | **V-process** | `diet` | **Process** — "steering **HOW** it's done" | Diet / exercise planning |
@@ -46,6 +47,12 @@ Both conditions surface the same tool steps (스크리닝 → 기준 분석 → 
 
 ## Other versions
 
+- **`STUDY=travel`** — V2 with a **real LLM**: the agent runs a natural
+  conversational intake (destination / duration / companions / style), then the
+  control group picks an execution version and the agent generates the itinerary.
+  The itinerary is generated **once** from the gathered info and reused for every
+  version, so the deliverable is held constant per participant. Needs Azure/OpenAI
+  creds (`.env`); `USE_MOCK_GPT=1` runs a rule-based demo without a key.
 - **`STUDY=finance`** — earlier V1 draft: allocate a monthly surplus across debt /
   emergency fund / investing. Also decisional control. See [FINANCE_STUDY_DESIGN.md](FINANCE_STUDY_DESIGN.md).
 - **`STUDY=diet`** — process control: the agent decides the plan and the user steers

@@ -30,6 +30,20 @@ app.secret_key = os.getenv('FLASK_SECRET_KEY', 'dev-secret-key-change-in-product
 DEFAULT_STUDY = os.getenv('STUDY', 'stock').strip().lower() or 'stock'
 
 STUDY_CONFIG = {
+    'travel': {
+        'title': 'AI 여행 플래너 에이전트',
+        'control_condition': 'version',
+        'scenario': (
+            "당신은 곧 여행을 계획하고 있습니다. AI 여행 플래너 에이전트가 먼저 여행지·기간·"
+            "동행·취향을 대화로 물어본 뒤, 당신에게 꼭 맞는 여행 일정을 짜줍니다. "
+            "에이전트에게 말을 걸며 시작해 보세요."
+        ),
+        'placeholder': '예: 여행 일정 짜는 걸 도와줘',
+        'starter': '여행 일정 짜는 걸 도와줘',
+        'suggestions': [
+            '여행 일정 짜는 걸 도와줘',
+        ],
+    },
     'stock': {
         'title': 'AI 증시 분석 보고서 에이전트',
         'control_condition': 'version',
@@ -106,6 +120,21 @@ def _build_gpt_service(study: str):
     if study == 'stock':
         return _load('services.report_mock_service:ReportMockService')()
 
+    if study == 'travel':
+        real_import = 'services.travel_gpt_service:TravelGPTService'
+        mock_import = 'services.travel_mock_service:TravelMockService'
+        if force_mock:
+            return _load(mock_import)()
+        try:
+            real_cls = _load(real_import)
+            if os.getenv('AZURE_OPENAI_ENDPOINT'):
+                return real_cls(use_azure=True)
+            if os.getenv('OPENAI_API_KEY'):
+                return real_cls(use_azure=False)
+        except Exception as e:  # pragma: no cover
+            print(f"Falling back to mock travel service: {e}")
+        return _load(mock_import)()
+
     if study == 'diet':
         real_import = 'services.gpt_service:GPTService'
         mock_import = 'services.mock_gpt_service:MockGPTService'
@@ -141,6 +170,9 @@ def _build_workflow(study: str, service):
     if study == 'stock':
         from services.report_workflow_manager import StockReportWorkflowManager
         return StockReportWorkflowManager(service, db_manager)
+    if study == 'travel':
+        from services.travel_workflow_manager import TravelWorkflowManager
+        return TravelWorkflowManager(service, db_manager)
     from services.hiring_workflow_manager import HiringWorkflowManager
     return HiringWorkflowManager(service, db_manager)
 

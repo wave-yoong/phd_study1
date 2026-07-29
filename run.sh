@@ -6,6 +6,10 @@
 #                             Agent offers 2-3 versions (length/model/time); user
 #                             picks which to run, report is identical regardless.
 #                             Conditions: version vs auto. (fixed content, no API key)
+#   STUDY=travel            : LLM-driven travel planner, EXECUTION-VERSION control.
+#                             Conversational intake (real LLM) -> version pick ->
+#                             itinerary. Conditions: version vs auto.
+#                             (needs Azure/OpenAI creds; USE_MOCK_GPT=1 for demo)
 #   STUDY=hiring            : hiring-decision agent, DECISIONAL control
 #                             ("deciding WHAT to do"). Conditions: decision vs auto.
 #   STUDY=finance           : finance allocation agent, also decisional control.
@@ -34,7 +38,7 @@ fi
 
 if [ "$STUDY" = "diet" ]; then
     GROUPS="?group=control or ?group=auto"
-elif [ "$STUDY" = "stock" ]; then
+elif [ "$STUDY" = "stock" ] || [ "$STUDY" = "travel" ]; then
     GROUPS="?group=version or ?group=auto"
 else
     GROUPS="?group=decision or ?group=auto"   # hiring / finance
